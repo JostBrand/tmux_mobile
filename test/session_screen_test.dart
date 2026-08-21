@@ -29,7 +29,8 @@ void main() {
       client.dispose();
       await input.close();
     });
-    await tester.pumpWidget(MaterialApp(home: SessionScreen(client: client)));
+    await tester
+        .pumpWidget(MaterialApp(home: SessionScreen(client: client)));
     await tester.pump();
     // Let the resize debounce of the pane feeder settle.
     await tester.pump(const Duration(milliseconds: 300));
@@ -66,6 +67,34 @@ void main() {
     await tester.tap(find.text('Tab'));
     await tester.pump();
     expect(commands, contains("send-keys -t %1 -- 'Tab'"));
+  });
+
+  testWidgets('history button fetches scrollback for the current pane',
+      (tester) async {
+    await pumpScreen(tester);
+
+    // Drain all commands pending from setup (pane seed + resize refreshes)
+    // so the sheet's fetch is the only pending command afterwards.
+    final pending = commands
+        .where((c) =>
+            c.startsWith('capture-pane') || c.startsWith('refresh-client'))
+        .length;
+    for (var i = 0; i < pending; i++) {
+      input.add(utf8.encode('%begin 1 1\nfiller\n%end 1 1\n'));
+    }
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.manage_search));
+    await tester.pump();
+    await tester.pump();
+
+    input.add(
+        utf8.encode('%begin 1 1\nold-line-1\nold-line-2\n%end 1 1\n'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('History - %0'), findsOneWidget);
+    expect(find.text('old-line-2'), findsOneWidget);
+    expect(commands, contains('capture-pane -p -e -t %0 -S -200'));
   });
 
   testWidgets('renders a terminal and the keybar', (tester) async {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:tmux_mobile/src/config/known_hosts.dart';
 import 'package:tmux_mobile/src/control_mode/control_mode_client.dart';
 
 /// An active tmux control-mode connection over SSH.
@@ -61,7 +62,7 @@ class SshTmuxTransport {
     this.port = 22,
     this.identity,
     this.passwordPrompt,
-    this.onVerifyHostKey,
+    this.knownHosts,
   });
 
   final String host;
@@ -73,9 +74,9 @@ class SshTmuxTransport {
   final SSHKeyPair? identity;
   final Future<String?> Function()? passwordPrompt;
 
-  /// Host key verification callback. Defaults to TOFU (accept anything);
-  /// persistent known-hosts handling ships with the profile UI (M3).
-  final SSHHostkeyVerifyHandler? onVerifyHostKey;
+  /// Host key verification: TOFU on first connect, reject on mismatch.
+  /// Without a store every key is accepted (tests, local sshd).
+  final KnownHostsStore? knownHosts;
 
   Future<TmuxConnection> connect(
     String sessionName, {
@@ -90,7 +91,7 @@ class SshTmuxTransport {
       username: username,
       identities: identity == null ? null : [identity!],
       onPasswordRequest: passwordPrompt == null ? null : () => passwordPrompt!(),
-      onVerifyHostKey: onVerifyHostKey ?? (type, fingerprint) => true,
+      onVerifyHostKey: _verifyHostKey,
       keepAliveInterval: const Duration(seconds: 10),
     );
     await client.authenticated;
@@ -109,5 +110,23 @@ class SshTmuxTransport {
         output: _Uint8ListSinkAdapter(session.stdin),
       ),
     );
+  }
+
+  FutureOr<bool> _verifyHostKey(String type, Uint8List fingerprint) async {
+    final store = knownHosts;
+    if (store == null) {
+      return true;
+    }
+    final hostPort = '$host:$port';
+    final offered = encodeHostFingerprint(fingerprint);
+    final known = await store.lookup(hostPort);
+    if (!verifyHostKeyDecision(
+        knownFingerprint: known, offeredFingerprint: offered)) {
+      return false;
+    }
+    if (known == null) {
+      await store.store(hostPort, offered);
+    }
+    return true;
   }
 }

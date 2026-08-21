@@ -1,12 +1,42 @@
-import 'package:flutter/material.dart';
-import 'package:tmux_mobile/src/ui/keybar.dart';
+import 'dart:io';
 
-void main() {
-  runApp(const TmuxMobileApp());
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:tmux_mobile/src/config/known_hosts.dart';
+import 'package:tmux_mobile/src/config/profile_repository.dart';
+import 'package:tmux_mobile/src/config/secret_store.dart';
+import 'package:tmux_mobile/src/transport/session_factory.dart';
+import 'package:tmux_mobile/src/ui/home_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final supportDir = await getApplicationSupportDirectory();
+  final profiles = JsonFileProfileRepository(
+      File('${supportDir.path}/profiles.json'));
+  final knownHosts = JsonFileKnownHostsStore(
+      File('${supportDir.path}/known_hosts.json'));
+  runApp(TmuxMobileApp(
+    profiles: profiles,
+    knownHosts: knownHosts,
+    secretStore: SecureStorageSecretStore(),
+  ));
 }
 
 class TmuxMobileApp extends StatelessWidget {
-  const TmuxMobileApp({super.key});
+  const TmuxMobileApp({
+    super.key,
+    required this.profiles,
+    required this.knownHosts,
+    required this.secretStore,
+    this.sessionFactory,
+  });
+
+  final ProfileRepository profiles;
+  final KnownHostsStore knownHosts;
+  final SecretStore secretStore;
+
+  /// Injectable for tests; defaults to the real SSH factory.
+  final SessionFactory? sessionFactory;
 
   @override
   Widget build(BuildContext context) {
@@ -18,37 +48,13 @@ class TmuxMobileApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
+        appBarTheme: const AppBarTheme(centerTitle: false),
       ),
-      home: const HomeScreen(),
-    );
-  }
-}
-
-/// M2 placeholder: connection profiles (host/user/key) arrive with M3.
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('tmux_mobile')),
-      body: Column(
-        children: [
-          Expanded(
-            child: Center(
-              child: Text(
-                'Connection profiles arrive with M3.\n'
-                'The control-mode client, SSH transport, pane rendering\n'
-                'and keybar are ready (see flutter test).',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyLarge,
-              ),
-            ),
-          ),
-          // Keybar preview until the session screen is wired up.
-          Keybar(onKey: (_) {}),
-        ],
+      home: HomeScreen(
+        profiles: profiles,
+        secretStore: secretStore,
+        sessionFactory:
+            sessionFactory ?? SshSessionFactory(secretStore: secretStore, knownHosts: knownHosts),
       ),
     );
   }

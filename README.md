@@ -5,9 +5,9 @@ instead of raw terminal emulation. The app receives structured notifications
 (panes, windows, sessions as objects) and can therefore do what plain
 terminal apps can't:
 
-- real per-pane scrollback (via `capture-pane -p -e -S -`)
-- gesture-first navigation (swipe between panes/windows)
-- a configurable on-screen keybar instead of raw keyboard input
+- real per-pane scrollback (history sheet via `capture-pane -p -e -S -`)
+- gesture-first navigation (swipe between panes)
+- a configurable on-screen keybar with sticky Ctrl/Alt modifiers
 
 The tmux session lives on the server: the app attaches/detaches at will and
 can coexist with desktop clients.
@@ -16,28 +16,30 @@ can coexist with desktop clients.
 
 **M1 (protocol spike) - done.** `lib/src/control_mode/control_mode_client.dart`
 speaks the tmux control protocol over a byte stream. Verified against real
-tmux 3.4:
-
-- `%session-changed` / `%output` / `%begin`+`%end` command bracketing
-  (incl. `%error` for failed commands)
-- `send-keys`, `display-message -p`, `capture-pane` scrollback fetch
+tmux 3.4: `%session-changed`/`%output`, `%begin`+`%end` command bracketing
+(incl. `%error`), `send-keys`, `display-message -p`, `capture-pane`.
 
 **M2 (transport + rendering) - done.**
 
-- `lib/src/transport/ssh_tmux_transport.dart`: dartssh2 client, PTY session,
-  key/password auth, `tmux -CC attach-session` over SSH (like iTerm2)
-- `lib/src/render/pane_output_feeder.dart` + `pane_screen.dart`: `%output`
-  lines feed an xterm Terminal; initial screen seeded via `capture-pane -p -e`
-  (`refresh-client -C` only redraws on size change)
-- `lib/src/ui/keybar.dart` + `session_screen.dart`: minimal keybar
-  (Esc/Tab/arrows/Enter/C-c...) and swipe-to-switch-pane (app-side pane state,
-  tmux does not notify control clients about active-pane changes)
-- End-to-end integration test over a REAL sshd (non-root, 127.0.0.1:2222,
-  started by the workspace startup script) with the workspace key
+- `SshTmuxTransport` (dartssh2): PTY session running `tmux -CC attach-session`
+- `PaneOutputFeeder`: `%output` -> xterm Terminal; screen seeding via
+  `capture-pane -p -e` (refresh-client only redraws on size change)
+- End-to-end SSH test against a real sshd (non-root, 127.0.0.1:2222 in the
+  workspace)
 
-Up next (M3): connection profiles (host/user/key, known-hosts TOFU),
-full gesture layer, scrollback UX (client-side cache + tmux copy-mode),
-keybar configurability, design pass.
+**M3 (profiles, scrollback, keybar, shell) - done.**
+
+- Connection profiles (host/user/port/session, key auth via
+  flutter_secure_storage, password prompt at connect time - never stored)
+- Known-hosts: TOFU on first connect, reject on fingerprint mismatch
+- History sheet: paginated server-side scrollback with overlap dedup,
+  tap-to-copy
+- Keybar with sticky Ctrl/Alt modifiers; per-pane terminals survive pane
+  switches (no missed output)
+- Home/profile-edit/connect screens, Material 3 dark theme
+
+Up next (M4): F-Droid release pipeline (reproducible build, metadata),
+notification/UX polish, %layout-change parsing for real pane layouts.
 
 ## Run tests
 
@@ -45,7 +47,6 @@ keybar configurability, design pass.
 flutter test
 ```
 
-- Local tmux integration tests spawn a real tmux server on a private socket
-  (tmux must be installed - it is in the dev image).
+- Local tmux integration tests spawn a real tmux server on a private socket.
 - The SSH integration test needs the workspace sshd on 127.0.0.1:2222
-  (started by the workspace startup script; skips when unreachable).
+  (skips when unreachable).

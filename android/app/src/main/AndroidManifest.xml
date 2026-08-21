@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- SSH to remote tmux hosts - release builds do NOT get this from the
+         flutter template (it only adds INTERNET to the debug/profile
+         manifests); without it every network call fails with
+         SocketException: OS Error: Operation not permitted (EPERM). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="tmux_mobile"
         android:name="${applicationName}"

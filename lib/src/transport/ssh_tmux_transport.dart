@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -53,8 +54,11 @@ class _Uint8ListSinkAdapter implements StreamSink<List<int>> {
 }
 
 /// SSH transport: connects to a remote host and attaches a tmux
-/// control-mode client (`tmux -CC attach-session`) on a PTY session -
-/// the same approach iTerm2 uses for its tmux integration.
+/// control-mode client on a PTY session - the same approach iTerm2 uses.
+///
+/// The remote command is `tmux -CC new-session -A -s <name>`:
+/// attach to the session if it exists, CREATE it otherwise (a configured
+/// profile name therefore never fails on a missing session).
 class SshTmuxTransport {
   SshTmuxTransport({
     required this.host,
@@ -78,13 +82,7 @@ class SshTmuxTransport {
   /// Without a store every key is accepted (tests, local sshd).
   final KnownHostsStore? knownHosts;
 
-  Future<TmuxConnection> connect(
-    String sessionName, {
-    int width = 80,
-    int height = 24,
-    Duration timeout = const Duration(seconds: 15),
-    String? socketName,
-  }) async {
+  Future<SSHClient> _connectClient({Duration timeout = const Duration(seconds: 15)}) async {
     final socket = await SSHSocket.connect(host, port, timeout: timeout);
     final client = SSHClient(
       socket,
@@ -95,9 +93,53 @@ class SshTmuxTransport {
       keepAliveInterval: const Duration(seconds: 10),
     );
     await client.authenticated;
+    return client;
+  }
+
+  /// Runs one command over SSH and returns its output (throwing on
+  /// connection problems). stderr is included by default (dartssh2 merges
+  /// the streams); pass [captureStderr] false for output parsing.
+  Future<String> runCommand(String command, {bool captureStderr = true}) async {
+    final client = await _connectClient();
+    try {
+      final output = await client.run(command, stderr: captureStderr);
+      return utf8.decode(output);
+    } finally {
+      await client.close();
+    }
+  }
+
+  /// Lists the names of all running tmux sessions (empty when no server
+  /// or no session exists).
+  Future<List<String>> listSessions({String? socketName}) async {
+    try {
+      final socketArg = socketName == null ? '' : '-L $socketName ';
+      // stderr off: "error connecting to ..." would otherwise land in the
+      // output and parse as a session name.
+      final output = await runCommand(
+          "tmux ${socketArg}list-sessions -F '#{session_name}'",
+          captureStderr: false);
+      return [
+        for (final line in output.split('\n'))
+          if (line.trim().isNotEmpty) line.trim(),
+      ];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<TmuxConnection> connect(
+    String sessionName, {
+    int width = 80,
+    int height = 24,
+    Duration timeout = const Duration(seconds: 15),
+    String? socketName,
+  }) async {
+    final client = await _connectClient(timeout: timeout);
     final socketArg = socketName == null ? '' : '-L $socketName ';
+    final quoted = _quote(sessionName);
     final session = await client.execute(
-      'tmux $socketArg-CC attach-session -t $sessionName',
+      'tmux $socketArg-CC new-session -A -s $quoted',
       pty: SSHPtyConfig(type: 'xterm-256color', width: width, height: height),
     );
     return TmuxConnection(
@@ -111,6 +153,9 @@ class SshTmuxTransport {
       ),
     );
   }
+
+  static String _quote(String value) =>
+      "'${value.replaceAll("'", "'\\''")}'";
 
   FutureOr<bool> _verifyHostKey(String type, Uint8List fingerprint) async {
     final store = knownHosts;

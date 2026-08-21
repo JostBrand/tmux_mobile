@@ -16,8 +16,17 @@ class OpenSession {
 /// Opens tmux sessions for a profile. Abstract so widget tests can
 /// inject a fake without any real SSH.
 abstract class SessionFactory {
+  /// Lists the names of running tmux sessions on the remote host
+  /// (empty when no server/session exists).
+  Future<List<String>> listSessions(
+    ConnectionProfile profile, {
+    required Future<String?> Function() passwordPrompt,
+  });
+
+  /// Attaches (or creates, via `new-session -A`) the session.
   Future<OpenSession> open(
     ConnectionProfile profile, {
+    required String sessionName,
     required Future<String?> Function() passwordPrompt,
   });
 }
@@ -31,20 +40,23 @@ class SshSessionFactory implements SessionFactory {
   final SecretStore secretStore;
   final KnownHostsStore knownHosts;
 
-  @override
-  Future<OpenSession> open(
-    ConnectionProfile profile, {
-    required Future<String?> Function() passwordPrompt,
-  }) async {
-    SSHKeyPair? identity;
-    if (profile.usesKeyAuth) {
-      final pem = await secretStore.read(profile.keySecretId!);
-      if (pem == null || pem.isEmpty) {
-        throw StateError('SSH key not found in the secret store');
-      }
-      identity = SSHKeyPair.fromPem(pem).first;
+  Future<SSHKeyPair?> _identity(ConnectionProfile profile) async {
+    if (!profile.usesKeyAuth) {
+      return null;
     }
-    final transport = SshTmuxTransport(
+    final pem = await secretStore.read(profile.keySecretId!);
+    if (pem == null || pem.isEmpty) {
+      throw StateError('SSH key not found in the secret store');
+    }
+    return SSHKeyPair.fromPem(pem).first;
+  }
+
+  SshTmuxTransport _transport(
+    ConnectionProfile profile,
+    SSHKeyPair? identity,
+    Future<String?> Function() passwordPrompt,
+  ) {
+    return SshTmuxTransport(
       host: profile.host,
       port: profile.port,
       username: profile.username,
@@ -52,7 +64,26 @@ class SshSessionFactory implements SessionFactory {
       passwordPrompt: identity == null ? passwordPrompt : null,
       knownHosts: knownHosts,
     );
-    final connection = await transport.connect(profile.sessionName);
+  }
+
+  @override
+  Future<List<String>> listSessions(
+    ConnectionProfile profile, {
+    required Future<String?> Function() passwordPrompt,
+  }) async {
+    final identity = await _identity(profile);
+    return _transport(profile, identity, passwordPrompt).listSessions();
+  }
+
+  @override
+  Future<OpenSession> open(
+    ConnectionProfile profile, {
+    required String sessionName,
+    required Future<String?> Function() passwordPrompt,
+  }) async {
+    final identity = await _identity(profile);
+    final connection = await _transport(profile, identity, passwordPrompt)
+        .connect(sessionName);
     return OpenSession(client: connection.control, close: connection.close);
   }
 }

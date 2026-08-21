@@ -73,6 +73,10 @@ void main() {
       await waitFor(control.sessionChanged, (s) => s == 'spike',
           timeout: const Duration(seconds: 15));
 
+      // Session auto-detect: listSessions must see the running session.
+      final sessions = await transport.listSessions(socketName: socketName);
+      expect(sessions, contains('spike'));
+
       final result = await control
           .runCommand('display-message -p ssh-ok')
           .timeout(const Duration(seconds: 10));

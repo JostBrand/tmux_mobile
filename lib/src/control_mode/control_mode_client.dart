@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
 
 /// A pane output notification (`%output <pane-id> <line>`).
 class PaneOutput {
@@ -25,14 +24,12 @@ class PaneOutput {
 /// - The client sends tmux commands as plain lines (`send-keys -t %0 ...`)
 ///   and control commands prefixed with `%` (`%subscribe`, `%exit`).
 class ControlModeClient {
-  ControlModeClient({required Stream<List<int>> input, required StreamSink<List<int>> output})
-      : _input = input,
-        _output = output {
+  ControlModeClient({required this.input, required this.output}) {
     _spawnLineProcessor();
   }
 
-  final Stream<List<int>> _input;
-  final StreamSink<List<int>> _output;
+  final Stream<List<int>> input;
+  final StreamSink<List<int>> output;
 
   final StreamController<PaneOutput> _paneOutput =
       StreamController<PaneOutput>.broadcast();
@@ -40,7 +37,6 @@ class ControlModeClient {
       StreamController<String>.broadcast();
   final StreamController<void> _exit = StreamController<void>.broadcast();
 
-  final List<String> _windows = [];
   String? _currentSession;
 
   bool _collecting = false;
@@ -59,7 +55,7 @@ class ControlModeClient {
   }
 
   void _spawnLineProcessor() {
-    final decoded = _input
+    final decoded = input
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         // PTY transports (script wrapper, SSH pty) deliver \r\n - strip the
@@ -97,21 +93,23 @@ class ControlModeClient {
         _collecting = true;
         _commandOutput.clear();
       case 'output':
-        if (parts.length >= 3) {
+        if (parts.length >= 3 && !_paneOutput.isClosed) {
           _paneOutput.add(PaneOutput(paneId: parts[1], line: parts.sublist(2).join(' ')));
         }
       case 'session-changed':
-        if (parts.length >= 3) {
+        if (parts.length >= 3 && !_sessionChanged.isClosed) {
           _currentSession = parts[2];
           _sessionChanged.add(parts[2]);
         }
       case 'exit':
-        _exit.add(null);
+        if (!_exit.isClosed) {
+          _exit.add(null);
+        }
     }
   }
 
   void _writeLine(String line) {
-    _output.add(utf8.encode('$line\n'));
+    output.add(utf8.encode('$line\n'));
   }
 
   void _completePendingCommand(String output) {

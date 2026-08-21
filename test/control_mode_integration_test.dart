@@ -32,7 +32,7 @@ void main() {
   }
 
   setUp(() async {
-    socket = 'spike-${pid}';
+    socket = 'spike-$pid';
     final ready = await Process.run('tmux', ['-L', socket, '-f', '/dev/null',
       'new-session', '-d', '-x', '80', '-y', '24', '-s', 'spike']);
     expect(ready.exitCode, 0, reason: '${ready.stderr}');

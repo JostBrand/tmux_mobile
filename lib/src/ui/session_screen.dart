@@ -10,6 +10,7 @@ import 'package:tmux_mobile/src/ui/keybar.dart';
 import 'package:tmux_mobile/src/ui/pane_history_sheet.dart';
 import 'package:tmux_mobile/src/ui/pane_view.dart';
 import 'package:tmux_mobile/src/ui/prefix_menu_sheet.dart';
+import 'package:tmux_mobile/src/ui/target_picker_sheet.dart';
 import 'package:tmux_mobile/src/utils/ansi.dart';
 import 'package:tmux_mobile/src/utils/keyboard_input.dart';
 import 'package:xterm/xterm.dart';
@@ -381,12 +382,69 @@ class _SessionScreenState extends State<SessionScreen> {
         onSendPrefix: () {
           _runModCommand('send-prefix -t $_currentPane');
         },
+        onWindowPicker: _openWindowPicker,
+        onPanePicker: _openPanePicker,
+        onCopyMode: () => _runModCommand('copy-mode'),
       ),
     );
     controller.closed.whenComplete(() {
       _menuOpen = false;
       _exitModMode();
     });
+  }
+
+  void _openWindowPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => TargetPickerSheet(
+        title: 'Windows',
+        fetch: () async {
+          final out = await widget.client.runCommand(
+              "list-windows -F '#{window_index}:#{window_name}'");
+          return [
+            for (final line in out.split('\n'))
+              if (line.trim().isNotEmpty)
+                () {
+                  final parts = line.trim().split(':');
+                  final index = parts.first;
+                  final name = parts.length > 1 ? parts.sublist(1).join(':') : index;
+                  return TargetOption(id: '@$index', label: name);
+                }(),
+          ];
+        },
+        onSelected: (option) =>
+            _runModCommand('select-window -t ${option.id}'),
+      ),
+    );
+  }
+
+  void _openPanePicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => TargetPickerSheet(
+        title: 'Panes',
+        fetch: () async {
+          final out = await widget.client.runCommand(
+              "list-panes -F '#{pane_id}:#{pane_current_command}'");
+          return [
+            for (final line in out.split('\n'))
+              if (line.trim().isNotEmpty)
+                () {
+                  final parts = line.trim().split(':');
+                  final id = parts.first;
+                  final command =
+                      parts.length > 1 ? parts.sublist(1).join(':') : id;
+                  return TargetOption(id: id, label: command);
+                }(),
+          ];
+        },
+        onSelected: (option) {
+          _runModCommand('select-pane -t ${option.id}');
+          _knownPanes.add(option.id);
+          setState(() => _currentPane = option.id);
+        },
+      ),
+    );
   }
 
   void _openHistory() {

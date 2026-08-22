@@ -72,6 +72,19 @@ void main() {
     expect(texts.length, texts.toSet().length);
   });
 
+  testWidgets('search filters the loaded lines', (tester) async {
+    await pumpSheet(tester, fetchOlder: (depth) async => [
+          'error: something broke',
+          'build finished',
+          'another line',
+        ]);
+
+    await tester.enterText(find.byType(TextField), 'build');
+    await tester.pump();
+    expect(find.text('build finished'), findsOneWidget);
+    expect(find.text('error: something broke'), findsNothing);
+  });
+
   testWidgets('tapping a line copies it', (tester) async {
     final copied = <String>[];
     await pumpSheet(tester,

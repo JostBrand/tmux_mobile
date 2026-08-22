@@ -75,12 +75,14 @@ class ControlModeClient {
   void _handleLine(String line) {
     if (_collecting) {
       // Command output is bracketed by %begin/%end (success) or
-      // %begin/%error (parse/exec failure) - complete on either.
+      // %begin/%error (parse/exec failure) - complete on either. All
+      // lines in between are output, INCLUDING ones starting with %
+      // (pane ids like '%0:bash' in capture-pane/list-panes output).
       if (line.startsWith('%end') || line.startsWith('%error')) {
         _collecting = false;
         _completePendingCommand(_commandOutput.toString());
         _commandOutput.clear();
-      } else if (!line.startsWith('%')) {
+      } else if (!line.startsWith('%begin')) {
         _commandOutput.writeln(line);
       }
       return;

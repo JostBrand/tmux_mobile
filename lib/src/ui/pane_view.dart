@@ -15,6 +15,11 @@ class PaneView extends StatelessWidget {
     return TerminalView(
       terminal,
       autofocus: false,
+      // autoResize off: the terminal's logical size follows the SERVER
+      // (window-size adoption on attach, explicit resizes). With
+      // autoResize the viewport constantly fights the adopted size in an
+      // endless resize->refresh-client loop.
+      autoResize: false,
       textStyle: textStyle ?? const TerminalStyle(),
     );
   }

@@ -36,11 +36,19 @@ class PrefixMenuSheet extends StatelessWidget {
     required this.config,
     required this.onExecute,
     required this.onSendPrefix,
+    this.onWindowPicker,
+    this.onPanePicker,
+    this.onCopyMode,
   });
 
   final ServerConfig config;
   final void Function(String command) onExecute;
   final void Function() onSendPrefix;
+
+  /// Picker callbacks (app-side sheets); null hides the entry.
+  final void Function()? onWindowPicker;
+  final void Function()? onPanePicker;
+  final void Function()? onCopyMode;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +87,33 @@ class PrefixMenuSheet extends StatelessWidget {
               Expanded(
                 child: ListView(
                   children: [
+                    if (onWindowPicker != null)
+                      ListTile(
+                        dense: true,
+                        leading: Icon(Icons.tab,
+                            color: theme.colorScheme.primary),
+                        title: const Text('Windows…'),
+                        subtitle: const Text('Pick a window'),
+                        onTap: onWindowPicker,
+                      ),
+                    if (onPanePicker != null)
+                      ListTile(
+                        dense: true,
+                        leading: Icon(Icons.grid_on,
+                            color: theme.colorScheme.primary),
+                        title: const Text('Panes…'),
+                        subtitle: const Text('Pick a pane'),
+                        onTap: onPanePicker,
+                      ),
+                    if (onCopyMode != null)
+                      ListTile(
+                        dense: true,
+                        leading: Icon(Icons.select_all,
+                            color: theme.colorScheme.primary),
+                        title: const Text('Copy mode'),
+                        subtitle: const Text('tmux copy-mode on the pane'),
+                        onTap: onCopyMode,
+                      ),
                     for (final binding in bindings)
                       ListTile(
                         dense: true,

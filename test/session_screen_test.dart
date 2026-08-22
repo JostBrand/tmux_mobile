@@ -147,9 +147,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(commands, contains('new-window'));
 
-    // Send-prefix entry forwards the prefix to the pane.
+    // Send-prefix entry forwards the prefix to the pane (it sits at the
+    // bottom of the sheet - scroll the sheet list first).
     await tester.tap(find.text('C-b'));
     await tester.pumpAndSettle();
+    await tester.drag(
+        find.byType(ListView).last, const Offset(0, -200));
+    await tester.pump();
     await tester.tap(find.textContaining('nested tmux'));
     await tester.pump();
     expect(commands, contains('send-prefix -t %0'));

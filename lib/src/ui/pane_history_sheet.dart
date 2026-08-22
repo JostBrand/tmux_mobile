@@ -36,6 +36,8 @@ class _PaneHistorySheetState extends State<PaneHistorySheet> {
   /// Oldest -> newest.
   final List<String> _lines = <String>[];
   int _depth = 0;
+  String _query = '';
+  final _searchController = TextEditingController();
   bool _loading = false;
   bool _hasMore = true;
   Object? _error;
@@ -129,6 +131,18 @@ class _PaneHistorySheetState extends State<PaneHistorySheet> {
                   ],
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    prefixIcon: Icon(Icons.search, size: 18),
+                    hintText: 'Search history',
+                  ),
+                  onChanged: (value) => setState(() => _query = value.trim()),
+                ),
+              ),
               Expanded(
                 child: ListView.builder(
                   controller: scrollController,
@@ -138,7 +152,10 @@ class _PaneHistorySheetState extends State<PaneHistorySheet> {
                     if (index >= _lines.length) {
                       return _buildFooter(theme);
                     }
-                    final line = _lines[_lines.length - 1 - index];
+                    var line = _lines[_lines.length - 1 - index];
+                    if (_query.isNotEmpty && !line.contains(_query)) {
+                      return const SizedBox.shrink();
+                    }
                     return InkWell(
                       onTap: () => _copyLine(line),
                       child: Padding(

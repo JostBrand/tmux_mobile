@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tmux_mobile/src/config/server_config.dart';
 import 'package:tmux_mobile/src/transport/ssh_tmux_transport.dart';
 
 /// End-to-end SSH transport test: connects to the per-workspace sshd
@@ -76,6 +77,11 @@ void main() {
       // Session auto-detect: listSessions must see the running session.
       final sessions = await transport.listSessions(socketName: socketName);
       expect(sessions, contains('spike'));
+
+      // Config introspection: list-keys must parse with prefix bindings.
+      final keys = await control.runCommand('list-keys');
+      final bindings = parseListKeys(keys);
+      expect(bindings.where((b) => b.table == 'prefix'), isNotEmpty);
 
       final result = await control
           .runCommand('display-message -p ssh-ok')

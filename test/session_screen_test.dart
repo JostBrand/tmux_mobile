@@ -103,4 +103,55 @@ void main() {
     expect(find.text('Escape'), findsOneWidget);
     expect(find.text('Enter'), findsOneWidget);
   });
+
+  testWidgets('prefix button shows the server bindings and executes them',
+      (tester) async {
+    await pumpScreen(tester);
+
+    // Drain commands pending from setup (seed + resize refreshes).
+    final pending = commands
+        .where((c) =>
+            c.startsWith('capture-pane') || c.startsWith('refresh-client'))
+        .length;
+    for (var i = 0; i < pending; i++) {
+      input.add(utf8.encode('%begin 1 1\nfiller\n%end 1 1\n'));
+    }
+    await tester.pump();
+
+    // Attach triggers the one-shot introspection + hygiene commands.
+    input.add(utf8.encode('%session-changed \$1 spike\n'));
+    await tester.pump();
+    input.add(utf8.encode('%begin 1 1\nprefix C-b\n%end 1 1\n')); // 1
+    await tester.pump();
+    input.add(utf8.encode(
+        '%begin 1 1\nbind-key -T prefix c new-window\n'
+        'bind-key -T prefix n next-window\n%end 1 1\n')); // 2
+    await tester.pump();
+    input.add(utf8.encode('%begin 1 1\n%end 1 1\n')); // 3 set-option
+    await tester.pump();
+    input.add(utf8.encode('%begin 1 1\n120x30\n%end 1 1\n')); // 4 size
+    await tester.pump();
+    input.add(utf8.encode('%begin 1 1\n%end 1 1\n')); // 5 refresh
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(commands, contains("set-option -t 'spike' detach-on-destroy off"));
+
+    // The prefix button is labeled with the server's real prefix.
+    await tester.tap(find.text('C-b'));
+    await tester.pumpAndSettle();
+    expect(find.text('Prefix menu (C-b)'), findsOneWidget);
+    expect(find.text('new-window'), findsOneWidget);
+
+    await tester.tap(find.text('new-window'));
+    await tester.pump();
+    expect(commands, contains('new-window'));
+
+    // Send-prefix entry forwards the prefix to the pane.
+    await tester.tap(find.text('C-b'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('nested tmux'));
+    await tester.pump();
+    expect(commands, contains('send-prefix -t %0'));
+  });
 }

@@ -2,24 +2,28 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:tmux_mobile/src/config/server_config.dart';
 import 'package:tmux_mobile/src/control_mode/control_mode_client.dart';
 import 'package:tmux_mobile/src/render/pane_output_feeder.dart';
 import 'package:tmux_mobile/src/ui/keybar.dart';
 import 'package:tmux_mobile/src/ui/pane_history_sheet.dart';
 import 'package:tmux_mobile/src/ui/pane_view.dart';
+import 'package:tmux_mobile/src/ui/prefix_menu_sheet.dart';
 import 'package:tmux_mobile/src/utils/ansi.dart';
+import 'package:tmux_mobile/src/utils/keyboard_input.dart';
 import 'package:xterm/xterm.dart';
 
 /// One live tmux session: the current pane rendered by [PaneView], a
-/// keybar at the bottom, horizontal swipes to switch the pane, and a
-/// swipe-down history sheet (server-side scrollback).
+/// keybar at the bottom, horizontal swipes to switch the pane, a
+/// swipe-down history sheet (server-side scrollback) and a PREFIX BUTTON
+/// opening the server's real prefix bindings as commands (the mobile
+/// replacement for the tmux prefix key).
 ///
-/// Terminals and output feeders are owned here per pane so they survive
-/// pane switches (no missed output, persistent scrollback).
-///
-/// Pane switching is app-side: the app issues `select-pane` and keeps its
-/// own notion of the current pane (tmux does not notify control clients
-/// about active-pane changes).
+/// On attach the app introspects the server (`list-keys`,
+/// `show-options -g prefix`) to label the prefix menu with the REAL
+/// bindings, applies session-scoped hygiene (`detach-on-destroy off`)
+/// and adopts the server's window size once (so a phone connect does not
+/// shrink panes for desktop clients).
 class SessionScreen extends StatefulWidget {
   const SessionScreen({
     super.key,
@@ -40,6 +44,8 @@ class SessionScreen extends StatefulWidget {
 
 class _SessionScreenState extends State<SessionScreen> {
   String _currentPane = '%0';
+  ServerConfig? _serverConfig;
+  bool _introspected = false;
   final _knownPanes = <String>{'%0'};
   final _terminals = <String, Terminal>{};
   final _feeders = <String, PaneOutputFeeder>{};
@@ -52,6 +58,12 @@ class _SessionScreenState extends State<SessionScreen> {
       if (_knownPanes.add(output.paneId)) {
         _ensurePane(output.paneId);
         setState(() {});
+      }
+    });
+    widget.client.sessionChanged.listen((session) {
+      if (!_introspected) {
+        _introspected = true;
+        unawaited(_introspectServer(session));
       }
     });
     _ensurePane(_currentPane);
@@ -77,6 +89,7 @@ class _SessionScreenState extends State<SessionScreen> {
     }
     terminal = Terminal(
       maxLines: 10000,
+      onOutput: (data) => _handleKeyboardInput(paneId, data),
       onResize: (width, height, pixelWidth, pixelHeight) {
         _feeders[paneId]?.onTerminalResized(width, height);
       },
@@ -92,6 +105,63 @@ class _SessionScreenState extends State<SessionScreen> {
     return terminal;
   }
 
+  /// Soft-keyboard input: xterm emits typed text via onOutput; forward it
+  /// to the pane via send-keys (Enter/Backspace become key names, the
+  /// rest is sent as literal text - batched).
+  void _handleKeyboardInput(String paneId, String data) {
+    translateKeyboardInput(
+      data,
+      onText: (text) => widget.client.sendKeys(paneId, text),
+      onEnter: () => widget.client.sendEnter(paneId),
+      onBackspace: () => widget.client.sendKeys(paneId, 'BSpace'),
+    );
+  }
+
+  /// One-shot server introspection + session hygiene on attach.
+  Future<void> _introspectServer(String sessionName) async {
+    try {
+      final prefixOut =
+          await widget.client.runCommand('show-options -g prefix');
+      final keysOut = await widget.client.runCommand('list-keys');
+      final config = ServerConfig(
+        prefix: parsePrefix(prefixOut),
+        bindings: parseListKeys(keysOut),
+      );
+      if (mounted) {
+        setState(() => _serverConfig = config);
+      }
+    } catch (_) {
+      // Prefix menu falls back to built-in actions.
+    }
+    try {
+      await widget.client.runCommand(
+          'set-option -t ${_quote(sessionName)} detach-on-destroy off');
+    } catch (_) {
+      // Non-fatal.
+    }
+    try {
+      // Adopt the window size ONCE: the control client's size influences
+      // window-size=smallest servers, so matching the existing window
+      // avoids shrinking panes for desktop clients.
+      final size = await widget.client
+          .runCommand("display-message -p '#{window_width}x#{window_height}'");
+      final match = RegExp(r'(\d+)x(\d+)').firstMatch(size.trim());
+      if (match != null) {
+        final width = int.parse(match.group(1)!);
+        final height = int.parse(match.group(2)!);
+        await widget.client.runCommand('refresh-client -C $width,$height');
+        for (final terminal in _terminals.values) {
+          terminal.resize(width, height);
+        }
+      }
+    } catch (_) {
+      // Keep the default size.
+    }
+  }
+
+  static String _quote(String value) =>
+      "'${value.replaceAll("'", "'\\''")}'";
+
   void _switchPane(int direction) {
     final panes = _knownPanes.toList()
       ..sort((a, b) => _paneIndex(a).compareTo(_paneIndex(b)));
@@ -106,6 +176,25 @@ class _SessionScreenState extends State<SessionScreen> {
 
   static int _paneIndex(String paneId) =>
       int.tryParse(paneId.substring(1)) ?? 0;
+
+  void _openPrefixMenu() {
+    final config = _serverConfig;
+    if (config == null) {
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => PrefixMenuSheet(
+        config: config,
+        onExecute: (command) {
+          unawaited(widget.client.runCommand(command).catchError((_) => ''));
+        },
+        onSendPrefix: () {
+          widget.client.sendCommand('send-prefix -t $_currentPane');
+        },
+      ),
+    );
+  }
 
   void _openHistory() {
     final paneId = _currentPane;
@@ -132,10 +221,17 @@ class _SessionScreenState extends State<SessionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final prefix = _serverConfig?.displayPrefix;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title ?? 'tmux session'),
         actions: [
+          FilledButton.tonalIcon(
+            onPressed: _serverConfig == null ? null : _openPrefixMenu,
+            icon: const Icon(Icons.grid_view, size: 18),
+            label: Text(prefix ?? '…'),
+          ),
+          const SizedBox(width: 4),
           IconButton(
             tooltip: 'History',
             icon: const Icon(Icons.manage_search),

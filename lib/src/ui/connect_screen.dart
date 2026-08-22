@@ -183,10 +183,11 @@ class _ConnectScreenState extends State<ConnectScreen> {
         }
         return;
       }
+      final resolvedSession = sessionName;
 
       final session = await widget.sessionFactory.open(
         widget.profile,
-        sessionName: sessionName,
+        sessionName: resolvedSession,
         passwordPrompt: passwordPrompt,
       );
       if (!mounted) {
@@ -200,6 +201,11 @@ class _ConnectScreenState extends State<ConnectScreen> {
             title: '${widget.profile.name} · $sessionName',
             onDispose: session.close,
             settingsStore: widget.settingsStore,
+            onReconnect: () => widget.sessionFactory.open(
+              widget.profile,
+              sessionName: resolvedSession,
+              passwordPrompt: passwordPrompt,
+            ),
           ),
         ),
       );

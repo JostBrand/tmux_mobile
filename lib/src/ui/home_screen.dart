@@ -3,6 +3,7 @@ import 'package:tmux_mobile/src/config/connection_profile.dart';
 import 'package:tmux_mobile/src/config/profile_repository.dart';
 import 'package:tmux_mobile/src/config/secret_store.dart';
 import 'package:tmux_mobile/src/config/settings_store.dart';
+import 'package:tmux_mobile/src/integration/session_registry.dart';
 import 'package:tmux_mobile/src/notifications/activity_notifier.dart';
 import 'package:tmux_mobile/src/transport/session_factory.dart';
 import 'package:tmux_mobile/src/ui/connect_screen.dart';
@@ -18,6 +19,7 @@ class HomeScreen extends StatefulWidget {
     required this.sessionFactory,
     this.settingsStore,
     this.activityNotifier,
+    this.registry,
   });
 
   final ProfileRepository profiles;
@@ -25,6 +27,7 @@ class HomeScreen extends StatefulWidget {
   final SessionFactory sessionFactory;
   final SettingsStore? settingsStore;
   final ActivityNotifier? activityNotifier;
+  final SessionRegistry? registry;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -38,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _profilesFuture = widget.profiles.load();
+    widget.registry?.version.addListener(_onRegistryChanged);
     final store = widget.settingsStore;
     if (store != null) {
       store.load().then((settings) {
@@ -68,6 +72,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    widget.registry?.version.removeListener(_onRegistryChanged);
+    super.dispose();
+  }
+
+  void _onRegistryChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   void _reload() {
     setState(() {
       _profilesFuture = widget.profiles.load();
@@ -83,6 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
           sessionFactory: widget.sessionFactory,
           settingsStore: widget.settingsStore,
           activityNotifier: widget.activityNotifier,
+          registry: widget.registry,
         ),
       ),
     );
@@ -106,6 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final pendingCount = widget.registry?.queue.length ?? 0;
     return Scaffold(
       appBar: AppBar(
         title: const Text('tmux_mobile'),
@@ -122,7 +140,24 @@ class _HomeScreenState extends State<HomeScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Add host'),
       ),
-      body: FutureBuilder<List<ConnectionProfile>>(
+      body: Column(
+        children: [
+          if (pendingCount > 0)
+            MaterialBanner(
+              leading: const Icon(Icons.input),
+              content: Text(
+                '$pendingCount text(s) from other apps are waiting - '
+                'connect to send them',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => widget.registry?.queue.clear(),
+                  child: const Text('Discard'),
+                ),
+              ],
+            ),
+          Expanded(
+            child: FutureBuilder<List<ConnectionProfile>>(
         future: _profilesFuture,
         builder: (context, snapshot) {
           final profiles = snapshot.data ?? const <ConnectionProfile>[];
@@ -184,6 +219,9 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           );
         },
+      ),
+          ),
+        ],
       ),
     );
   }

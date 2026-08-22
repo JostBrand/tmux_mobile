@@ -11,6 +11,7 @@ void main() {
     WidgetTester tester, {
     required Future<List<String>> Function(int) fetchOlder,
     void Function(String)? onCopy,
+    void Function(String)? onShare,
   }) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -24,6 +25,7 @@ void main() {
                   paneId: '%0',
                   fetchOlder: fetchOlder,
                   onCopy: onCopy,
+                  onShare: onShare,
                   pageSize: 10,
                 ),
               ),
@@ -83,6 +85,16 @@ void main() {
     await tester.pump();
     expect(find.text('build finished'), findsOneWidget);
     expect(find.text('error: something broke'), findsNothing);
+  });
+
+  testWidgets('long-pressing a line shares it', (tester) async {
+    final shared = <String>[];
+    await pumpSheet(tester,
+        fetchOlder: (depth) async => page(depth), onShare: shared.add);
+
+    await tester.longPress(find.text('line-1010'));
+    await tester.pump();
+    expect(shared, ['line-1010']);
   });
 
   testWidgets('tapping a line copies it', (tester) async {

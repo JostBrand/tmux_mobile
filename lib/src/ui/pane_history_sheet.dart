@@ -15,6 +15,7 @@ class PaneHistorySheet extends StatefulWidget {
     required this.paneId,
     required this.fetchOlder,
     this.onCopy,
+    this.onShare,
     this.pageSize = 200,
   });
 
@@ -25,6 +26,9 @@ class PaneHistorySheet extends StatefulWidget {
 
   /// Called with the text of a tapped line (defaults to clipboard copy).
   final void Function(String line)? onCopy;
+
+  /// Called with the text of a long-pressed line (share to other apps).
+  final void Function(String line)? onShare;
 
   final int pageSize;
 
@@ -158,6 +162,9 @@ class _PaneHistorySheetState extends State<PaneHistorySheet> {
                     }
                     return InkWell(
                       onTap: () => _copyLine(line),
+                      onLongPress: widget.onShare == null
+                          ? null
+                          : () => widget.onShare!(line),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 2),

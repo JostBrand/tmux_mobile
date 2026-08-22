@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tmux_mobile/src/config/connection_profile.dart';
 import 'package:tmux_mobile/src/config/secret_store.dart';
 import 'package:tmux_mobile/src/config/settings_store.dart';
+import 'package:tmux_mobile/src/integration/session_registry.dart';
 import 'package:tmux_mobile/src/notifications/activity_notifier.dart';
 import 'package:tmux_mobile/src/transport/session_factory.dart';
 import 'package:tmux_mobile/src/ui/session_screen.dart';
@@ -22,6 +23,7 @@ class ConnectScreen extends StatefulWidget {
     required this.sessionFactory,
     this.settingsStore,
     this.activityNotifier,
+    this.registry,
   });
 
   final ConnectionProfile profile;
@@ -29,6 +31,7 @@ class ConnectScreen extends StatefulWidget {
   final SessionFactory sessionFactory;
   final SettingsStore? settingsStore;
   final ActivityNotifier? activityNotifier;
+  final SessionRegistry? registry;
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -210,6 +213,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
             onDispose: session.close,
             settingsStore: widget.settingsStore,
             activityNotifier: widget.activityNotifier,
+            registry: widget.registry,
             onReconnect: () => widget.sessionFactory.open(
               widget.profile,
               sessionName: resolvedSession,

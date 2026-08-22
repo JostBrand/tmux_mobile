@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:tmux_mobile/src/config/server_config.dart';
 import 'package:tmux_mobile/src/notifications/activity_notifier.dart';
 import 'package:tmux_mobile/src/config/settings_store.dart';
+import 'package:tmux_mobile/src/integration/intent_receiver.dart';
+import 'package:tmux_mobile/src/integration/session_registry.dart';
 import 'package:tmux_mobile/src/control_mode/control_mode_client.dart';
 import 'package:tmux_mobile/src/render/pane_output_feeder.dart';
 import 'package:tmux_mobile/src/transport/session_factory.dart';
@@ -43,6 +45,7 @@ class SessionScreen extends StatefulWidget {
     this.settingsStore,
     this.activityNotifier,
     this.activityMonitor,
+    this.registry,
   });
 
   final ControlModeClient client;
@@ -64,6 +67,9 @@ class SessionScreen extends StatefulWidget {
   /// Injectable for tests (fake clock); defaults to real time.
   final ActivityMonitor? activityMonitor;
 
+  /// Registers the session for text integration from other apps.
+  final SessionRegistry? registry;
+
   @override
   State<SessionScreen> createState() => _SessionScreenState();
 }
@@ -78,6 +84,7 @@ class _SessionScreenState extends State<SessionScreen> {
   String? _windowName;
   ConnectionStatus _status = ConnectionStatus.connected;
   late final ActivityMonitor _activityMonitor;
+  late final LiveSessionHandle _sessionHandle;
   bool _introspected = false;
   bool _reconnecting = false;
   final _knownPanes = <String>{'%0'};
@@ -100,6 +107,11 @@ class _SessionScreenState extends State<SessionScreen> {
     super.initState();
     _client = widget.client;
     _activityMonitor = widget.activityMonitor ?? ActivityMonitor();
+    _sessionHandle = LiveSessionHandle(
+      profileName: widget.title ?? 'tmux session',
+      sendText: (text) => _sendExternalText(text),
+    );
+    widget.registry?.register(_sessionHandle);
     _closeCurrentSession = widget.onDispose ?? () async {};
     _wireClient();
     _ensurePane(_currentPane);
@@ -111,6 +123,62 @@ class _SessionScreenState extends State<SessionScreen> {
         }
       }));
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _offerQueuedTexts();
+    });
+  }
+
+  /// Offers text queued from other apps (shared before this session was
+  /// open): send with Enter, send raw, or discard.
+  void _offerQueuedTexts() {
+    final registry = widget.registry;
+    if (registry == null || registry.queue.length == 0 || !mounted) {
+      return;
+    }
+    final text = registry.queue.takeNext();
+    if (text == null) {
+      return;
+    }
+    final preview = text.length > 60 ? '${text.substring(0, 60)}…' : text;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Text from another app'),
+        content: Text(
+          'Send this to the pane?\n\n$preview',
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Discard'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _sendExternalText(text);
+            },
+            child: const Text('Send'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _sendExternalText('$text\n');
+            },
+            child: const Text('Send + Enter'),
+          ),
+        ],
+      ),
+    ).then((_) => _offerQueuedTexts());
+  }
+
+  void _sendExternalText(String text) {
+    translateKeyboardInput(
+      text,
+      onText: (chunk) => _client.sendKeys(_currentPane, chunk),
+      onEnter: () => _client.sendEnter(_currentPane),
+      onBackspace: () => _client.sendKeys(_currentPane, 'BSpace'),
+    );
   }
 
   /// (Re)subscribes the client-driven wiring. Called on init and after
@@ -209,6 +277,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   @override
   void dispose() {
+    widget.registry?.unregister(_sessionHandle);
     _modTimer?.cancel();
     _windowSubscription?.cancel();
     _exitSubscription?.cancel();
@@ -442,9 +511,14 @@ class _SessionScreenState extends State<SessionScreen> {
       await Clipboard.setData(ClipboardData(text: last));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Copied last line'),
-              duration: Duration(seconds: 1)),
+          SnackBar(
+            content: const Text('Copied last line'),
+            duration: const Duration(seconds: 2),
+            action: SnackBarAction(
+              label: 'Share',
+              onPressed: () => ShareOut.shareText(last),
+            ),
+          ),
         );
       }
     }
@@ -594,6 +668,7 @@ class _SessionScreenState extends State<SessionScreen> {
         onCopy: (line) {
           Clipboard.setData(ClipboardData(text: line));
         },
+        onShare: (line) => ShareOut.shareText(line),
       ),
     );
   }

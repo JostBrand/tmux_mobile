@@ -5,7 +5,17 @@ import 'package:flutter/services.dart';
 import 'package:tmux_mobile/src/config/connection_profile.dart';
 import 'package:tmux_mobile/src/config/profile_repository.dart';
 import 'package:tmux_mobile/src/config/settings_store.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
+
+/// Platform channel into MainActivity (FLAG_KEEP_SCREEN_ON) - a native
+/// 20-line replacement for the wakelock_plus plugin (whose
+/// package_info_plus dependency breaks under AGP9 built-in Kotlin).
+class _KeepScreenOn {
+  static const _channel = MethodChannel('tmux_mobile/wakelock');
+
+  static void set(bool enabled) {
+    _channel.invokeMethod('setKeepScreenOn', enabled);
+  }
+}
 
 /// App settings: font size, haptics, keep-screen-on, profile
 /// export/import (JSON via the clipboard - no cloud, no dependencies).
@@ -44,11 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _applyKeepScreenOn(bool enabled) {
-    if (enabled) {
-      WakelockPlus.enable();
-    } else {
-      WakelockPlus.disable();
-    }
+    _KeepScreenOn.set(enabled);
   }
 
   Future<void> _exportProfiles() async {

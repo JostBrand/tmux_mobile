@@ -4,6 +4,7 @@
          manifests); without it every network call fails with
          SocketException: OS Error: Operation not permitted (EPERM). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="tmux_mobile"
         android:name="${applicationName}"

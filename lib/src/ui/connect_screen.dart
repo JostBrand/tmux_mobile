@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tmux_mobile/src/config/connection_profile.dart';
 import 'package:tmux_mobile/src/config/secret_store.dart';
 import 'package:tmux_mobile/src/config/settings_store.dart';
+import 'package:tmux_mobile/src/notifications/activity_notifier.dart';
 import 'package:tmux_mobile/src/transport/session_factory.dart';
 import 'package:tmux_mobile/src/ui/session_screen.dart';
 
@@ -20,12 +21,14 @@ class ConnectScreen extends StatefulWidget {
     required this.secretStore,
     required this.sessionFactory,
     this.settingsStore,
+    this.activityNotifier,
   });
 
   final ConnectionProfile profile;
   final SecretStore secretStore;
   final SessionFactory sessionFactory;
   final SettingsStore? settingsStore;
+  final ActivityNotifier? activityNotifier;
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -190,6 +193,11 @@ class _ConnectScreenState extends State<ConnectScreen> {
         sessionName: resolvedSession,
         passwordPrompt: passwordPrompt,
       );
+      final settingsStore = widget.settingsStore;
+      if (settingsStore != null) {
+        final settings = await settingsStore.load();
+        await settingsStore.save(settings.withRecent(widget.profile.id));
+      }
       if (!mounted) {
         await session.close();
         return;
@@ -201,6 +209,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
             title: '${widget.profile.name} · $sessionName',
             onDispose: session.close,
             settingsStore: widget.settingsStore,
+            activityNotifier: widget.activityNotifier,
             onReconnect: () => widget.sessionFactory.open(
               widget.profile,
               sessionName: resolvedSession,

@@ -37,6 +37,8 @@ class ControlModeClient {
       StreamController<String>.broadcast();
   final StreamController<String> _windowRenamed =
       StreamController<String>.broadcast();
+  final StreamController<String> _windowPaneChanged =
+      StreamController<String>.broadcast();
   final StreamController<void> _exit = StreamController<void>.broadcast();
 
   String? _currentSession;
@@ -48,6 +50,7 @@ class ControlModeClient {
   Stream<PaneOutput> get paneOutput => _paneOutput.stream;
   Stream<String> get sessionChanged => _sessionChanged.stream;
   Stream<String> get windowRenamed => _windowRenamed.stream;
+  Stream<String> get windowPaneChanged => _windowPaneChanged.stream;
   Stream<void> get exited => _exit.stream;
   String? get currentSession => _currentSession;
 
@@ -109,6 +112,11 @@ class ControlModeClient {
       case 'window-renamed':
         if (parts.length >= 3 && !_windowRenamed.isClosed) {
           _windowRenamed.add(parts.skip(2).join(' '));
+        }
+      case 'window-pane-changed':
+        // Format: %window-pane-changed @<window-id> %<pane-id>
+        if (parts.length >= 3 && !_windowPaneChanged.isClosed) {
+          _windowPaneChanged.add(parts[2]);
         }
       case 'exit':
         if (!_exit.isClosed) {
@@ -172,6 +180,7 @@ class ControlModeClient {
     _paneOutput.close();
     _sessionChanged.close();
     _windowRenamed.close();
+    _windowPaneChanged.close();
     _exit.close();
   }
 

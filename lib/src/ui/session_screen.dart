@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tmux_mobile/src/config/server_config.dart';
+import 'package:tmux_mobile/src/notifications/activity_notifier.dart';
 import 'package:tmux_mobile/src/config/settings_store.dart';
 import 'package:tmux_mobile/src/control_mode/control_mode_client.dart';
 import 'package:tmux_mobile/src/render/pane_output_feeder.dart';
@@ -40,6 +41,8 @@ class SessionScreen extends StatefulWidget {
     this.onDispose,
     this.onReconnect,
     this.settingsStore,
+    this.activityNotifier,
+    this.activityMonitor,
   });
 
   final ControlModeClient client;
@@ -55,6 +58,12 @@ class SessionScreen extends StatefulWidget {
   /// Persists app settings (font size, haptics); nullable in tests.
   final SettingsStore? settingsStore;
 
+  /// System notifications for hidden-pane activity; nullable in tests.
+  final ActivityNotifier? activityNotifier;
+
+  /// Injectable for tests (fake clock); defaults to real time.
+  final ActivityMonitor? activityMonitor;
+
   @override
   State<SessionScreen> createState() => _SessionScreenState();
 }
@@ -68,6 +77,7 @@ class _SessionScreenState extends State<SessionScreen> {
   AppSettings _settings = const AppSettings();
   String? _windowName;
   ConnectionStatus _status = ConnectionStatus.connected;
+  late final ActivityMonitor _activityMonitor;
   bool _introspected = false;
   bool _reconnecting = false;
   final _knownPanes = <String>{'%0'};
@@ -89,6 +99,7 @@ class _SessionScreenState extends State<SessionScreen> {
   void initState() {
     super.initState();
     _client = widget.client;
+    _activityMonitor = widget.activityMonitor ?? ActivityMonitor();
     _closeCurrentSession = widget.onDispose ?? () async {};
     _wireClient();
     _ensurePane(_currentPane);
@@ -113,9 +124,25 @@ class _SessionScreenState extends State<SessionScreen> {
         _ensurePane(output.paneId);
         setState(() {});
       }
+      final notifier = widget.activityNotifier;
+      if (notifier != null && output.paneId != _currentPane) {
+        // tmux monitor-activity semantics: only after a silent period.
+        if (_activityMonitor.onPaneOutput(output.paneId)) {
+          unawaited(notifier.notify(
+            title: widget.title ?? 'tmux session',
+            body: 'Activity in pane ${output.paneId}',
+          ));
+        }
+      }
     });
     _windowSubscription = _client.windowRenamed.listen((name) {
       setState(() => _windowName = name);
+    });
+    _client.windowPaneChanged.listen((paneId) {
+      if (_knownPanes.add(paneId)) {
+        _ensurePane(paneId);
+        setState(() {});
+      }
     });
     _exitSubscription = _client.exited.listen((_) => unawaited(_handleDisconnect()));
     _client.sessionChanged.listen((session) {

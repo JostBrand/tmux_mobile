@@ -9,11 +9,41 @@ void main() {
       home: Scaffold(body: Keybar(onKey: pressed.add)),
     ));
 
-    for (final key in ['Escape', 'Tab', 'C-c', 'PageUp', 'Enter', 'BSpace']) {
+    for (final key in [
+      'Escape',
+      'Tab',
+      'C-c',
+      'PageUp',
+      'Enter',
+      'BSpace',
+      'C-a',
+      'C-e',
+      'C-u',
+      'C-w',
+      'C-r',
+      'Home',
+      'End',
+    ]) {
+      await tester.scrollUntilVisible(find.text(key), 40,
+          scrollable: find.byType(Scrollable).first);
       await tester.tap(find.text(key));
       await tester.pump();
     }
-    expect(pressed, ['Escape', 'Tab', 'C-c', 'PageUp', 'Enter', 'BSpace']);
+    expect(pressed, [
+      'Escape',
+      'Tab',
+      'C-c',
+      'PageUp',
+      'Enter',
+      'BSpace',
+      'C-a',
+      'C-e',
+      'C-u',
+      'C-w',
+      'C-r',
+      'Home',
+      'End',
+    ]);
   });
 
   testWidgets('Ctrl is sticky: prefixes the next key', (tester) async {
@@ -62,5 +92,34 @@ void main() {
       find.ancestor(of: find.text('C-c'), matching: find.byType(TextButton)),
     );
     expect(button.onPressed, isNull);
+  });
+
+  testWidgets('paste and copy buttons trigger their callbacks',
+      (tester) async {
+    var pasted = 0;
+    var copied = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Keybar(
+          onKey: (_) {},
+          onPaste: () => pasted++,
+          onCopy: () => copied++,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('Paste'));
+    await tester.tap(find.text('Copy'));
+    expect(pasted, 1);
+    expect(copied, 1);
+  });
+
+  testWidgets('paste and copy buttons are omitted without callbacks',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: Keybar(onKey: (_) {})),
+    ));
+    expect(find.text('Paste'), findsNothing);
+    expect(find.text('Copy'), findsNothing);
   });
 }

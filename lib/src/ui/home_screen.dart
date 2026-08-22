@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tmux_mobile/src/config/connection_profile.dart';
 import 'package:tmux_mobile/src/config/profile_repository.dart';
 import 'package:tmux_mobile/src/config/secret_store.dart';
+import 'package:tmux_mobile/src/config/settings_store.dart';
 import 'package:tmux_mobile/src/transport/session_factory.dart';
 import 'package:tmux_mobile/src/ui/connect_screen.dart';
 import 'package:tmux_mobile/src/ui/profile_edit_screen.dart';
@@ -13,11 +14,13 @@ class HomeScreen extends StatefulWidget {
     required this.profiles,
     required this.secretStore,
     required this.sessionFactory,
+    this.settingsStore,
   });
 
   final ProfileRepository profiles;
   final SecretStore secretStore;
   final SessionFactory sessionFactory;
+  final SettingsStore? settingsStore;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -45,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
           profile: profile,
           secretStore: widget.secretStore,
           sessionFactory: widget.sessionFactory,
+          settingsStore: widget.settingsStore,
         ),
       ),
     );

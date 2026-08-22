@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:tmux_mobile/src/config/known_hosts.dart';
 import 'package:tmux_mobile/src/config/profile_repository.dart';
 import 'package:tmux_mobile/src/config/secret_store.dart';
+import 'package:tmux_mobile/src/config/settings_store.dart';
 import 'package:tmux_mobile/src/transport/session_factory.dart';
 import 'package:tmux_mobile/src/ui/home_screen.dart';
 
@@ -15,10 +16,13 @@ void main() async {
       File('${supportDir.path}/profiles.json'));
   final knownHosts = JsonFileKnownHostsStore(
       File('${supportDir.path}/known_hosts.json'));
+  final settings = JsonFileSettingsStore(
+      File('${supportDir.path}/settings.json'));
   runApp(TmuxMobileApp(
     profiles: profiles,
     knownHosts: knownHosts,
     secretStore: SecureStorageSecretStore(),
+    settingsStore: settings,
   ));
 }
 
@@ -28,6 +32,7 @@ class TmuxMobileApp extends StatelessWidget {
     required this.profiles,
     required this.knownHosts,
     required this.secretStore,
+    this.settingsStore,
     this.sessionFactory,
   });
 
@@ -37,6 +42,7 @@ class TmuxMobileApp extends StatelessWidget {
 
   /// Injectable for tests; defaults to the real SSH factory.
   final SessionFactory? sessionFactory;
+  final SettingsStore? settingsStore;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +59,7 @@ class TmuxMobileApp extends StatelessWidget {
       home: HomeScreen(
         profiles: profiles,
         secretStore: secretStore,
+        settingsStore: settingsStore,
         sessionFactory:
             sessionFactory ?? SshSessionFactory(secretStore: secretStore, knownHosts: knownHosts),
       ),

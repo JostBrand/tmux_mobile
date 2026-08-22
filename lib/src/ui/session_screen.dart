@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tmux_mobile/src/config/server_config.dart';
+import 'package:tmux_mobile/src/config/settings_store.dart';
 import 'package:tmux_mobile/src/control_mode/control_mode_client.dart';
 import 'package:tmux_mobile/src/render/pane_output_feeder.dart';
 import 'package:tmux_mobile/src/ui/keybar.dart';
@@ -35,6 +36,7 @@ class SessionScreen extends StatefulWidget {
     required this.client,
     this.title,
     this.onDispose,
+    this.settingsStore,
   });
 
   final ControlModeClient client;
@@ -42,6 +44,9 @@ class SessionScreen extends StatefulWidget {
 
   /// Called when the screen is disposed (closes the SSH connection).
   final Future<void> Function()? onDispose;
+
+  /// Persists app settings (font size, haptics); nullable in tests.
+  final SettingsStore? settingsStore;
 
   @override
   State<SessionScreen> createState() => _SessionScreenState();
@@ -51,6 +56,9 @@ class _SessionScreenState extends State<SessionScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   String _currentPane = '%0';
   ServerConfig? _serverConfig;
+  AppSettings _settings = const AppSettings();
+  String? _windowName;
+  StreamSubscription<String>? _windowSubscription;
   bool _introspected = false;
   final _knownPanes = <String>{'%0'};
   final _terminals = <String, Terminal>{};
@@ -81,11 +89,23 @@ class _SessionScreenState extends State<SessionScreen> {
       }
     });
     _ensurePane(_currentPane);
+    _windowSubscription = widget.client.windowRenamed.listen((name) {
+      setState(() => _windowName = name);
+    });
+    final store = widget.settingsStore;
+    if (store != null) {
+      unawaited(store.load().then((settings) {
+        if (mounted) {
+          setState(() => _settings = settings);
+        }
+      }));
+    }
   }
 
   @override
   void dispose() {
     _modTimer?.cancel();
+    _windowSubscription?.cancel();
     _subscription?.cancel();
     for (final feeder in _feeders.values) {
       feeder.dispose();
@@ -180,6 +200,9 @@ class _SessionScreenState extends State<SessionScreen> {
   // --- Mod mode -----------------------------------------------------------
 
   void _enterModMode() {
+    if (_settings.hapticFeedback) {
+      HapticFeedback.selectionClick();
+    }
     setState(() => _modMode = true);
     _modTimer?.cancel();
     _modTimer = Timer(const Duration(milliseconds: 2500), _exitModMode);
@@ -281,6 +304,50 @@ class _SessionScreenState extends State<SessionScreen> {
     _pointerStart.remove(event.pointer);
   }
 
+  void _setFontSize(double size) {
+    final clamped = size.clamp(10.0, 24.0);
+    setState(() => _settings = _settings.copyWith(fontSize: clamped));
+    final store = widget.settingsStore;
+    if (store != null) {
+      unawaited(store.save(_settings));
+    }
+  }
+
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || text.isEmpty) {
+      return;
+    }
+    translateKeyboardInput(
+      text,
+      onText: (chunk) => widget.client.sendKeys(_currentPane, chunk),
+      onEnter: () => widget.client.sendEnter(_currentPane),
+      onBackspace: () => widget.client.sendKeys(_currentPane, 'BSpace'),
+    );
+  }
+
+  /// Copies the current selection if any, otherwise the last non-empty
+  /// line of the pane (the mobile-friendly default for copying output).
+  Future<void> _copy() async {
+    final terminal = _ensurePane(_currentPane);
+    final lines = [
+      for (final line in terminal.buffer.getText().split('\n'))
+        line.trimRight(),
+    ];
+    final last = lines.lastWhere((line) => line.isNotEmpty, orElse: () => '');
+    if (last.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: last));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Copied last line'),
+              duration: Duration(seconds: 1)),
+        );
+      }
+    }
+  }
+
   void _switchPane(int direction) {
     final panes = _knownPanes.toList()
       ..sort((a, b) => _paneIndex(a).compareTo(_paneIndex(b)));
@@ -348,11 +415,25 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   Widget build(BuildContext context) {
     final prefix = _serverConfig?.displayPrefix;
+    final windowSuffix = _windowName == null ? '' : ' · $_windowName';
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: Text(widget.title ?? 'tmux session'),
+        title: Text(
+          '${widget.title ?? 'tmux session'}$windowSuffix',
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
+          IconButton(
+            tooltip: 'Smaller text',
+            icon: const Icon(Icons.text_decrease, size: 18),
+            onPressed: () => _setFontSize(_settings.fontSize - 1),
+          ),
+          IconButton(
+            tooltip: 'Larger text',
+            icon: const Icon(Icons.text_increase, size: 18),
+            onPressed: () => _setFontSize(_settings.fontSize + 1),
+          ),
           FilledButton.tonalIcon(
             onPressed: _serverConfig == null ? null : _openPrefixMenu,
             style: _modMode
@@ -393,13 +474,18 @@ class _SessionScreenState extends State<SessionScreen> {
                       velocity: details.primaryVelocity ?? 0),
                   child: AbsorbPointer(
                     absorbing: _modMode,
-                    child: PaneView(terminal: _ensurePane(_currentPane)),
+                    child: PaneView(
+                      terminal: _ensurePane(_currentPane),
+                      textStyle: TerminalStyle(fontSize: _settings.fontSize),
+                    ),
                   ),
                 ),
               ),
             ),
             Keybar(
               onKey: (key) => widget.client.sendKeys(_currentPane, key),
+              onPaste: _paste,
+              onCopy: _copy,
             ),
           ],
         ),

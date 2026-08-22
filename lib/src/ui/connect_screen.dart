@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tmux_mobile/src/config/connection_profile.dart';
 import 'package:tmux_mobile/src/config/secret_store.dart';
+import 'package:tmux_mobile/src/config/settings_store.dart';
 import 'package:tmux_mobile/src/transport/session_factory.dart';
 import 'package:tmux_mobile/src/ui/session_screen.dart';
 
@@ -18,11 +19,13 @@ class ConnectScreen extends StatefulWidget {
     required this.profile,
     required this.secretStore,
     required this.sessionFactory,
+    this.settingsStore,
   });
 
   final ConnectionProfile profile;
   final SecretStore secretStore;
   final SessionFactory sessionFactory;
+  final SettingsStore? settingsStore;
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -196,6 +199,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
             client: session.client,
             title: '${widget.profile.name} · $sessionName',
             onDispose: session.close,
+            settingsStore: widget.settingsStore,
           ),
         ),
       );

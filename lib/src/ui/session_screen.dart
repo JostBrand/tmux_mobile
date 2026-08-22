@@ -15,15 +15,20 @@ import 'package:xterm/xterm.dart';
 
 /// One live tmux session: the current pane rendered by [PaneView], a
 /// keybar at the bottom, horizontal swipes to switch the pane, a
-/// swipe-down history sheet (server-side scrollback) and a PREFIX BUTTON
-/// opening the server's real prefix bindings as commands (the mobile
-/// replacement for the tmux prefix key).
+/// history sheet (server-side scrollback) and a PREFIX BUTTON.
+///
+/// Prefix tap = MOD MODE: the prefix menu sheet opens AND the pane area
+/// above it becomes gesture-active (terminal input locked):
+///   swipe right  -> split-window -h      swipe up   -> new-window
+///   swipe down   -> split-window -v      swipe left -> previous-window
+///   two-finger right -> break-pane
+/// Mod mode ends when the sheet closes or 2.5s after the last action.
 ///
 /// On attach the app introspects the server (`list-keys`,
-/// `show-options -g prefix`) to label the prefix menu with the REAL
-/// bindings, applies session-scoped hygiene (`detach-on-destroy off`)
-/// and adopts the server's window size once (so a phone connect does not
-/// shrink panes for desktop clients).
+/// `show-options -g prefix`) to label the menu with the REAL bindings,
+/// applies session-scoped hygiene (`detach-on-destroy off`) and adopts
+/// the server's window size once (a phone connect must not shrink panes
+/// for desktop clients).
 class SessionScreen extends StatefulWidget {
   const SessionScreen({
     super.key,
@@ -43,6 +48,7 @@ class SessionScreen extends StatefulWidget {
 }
 
 class _SessionScreenState extends State<SessionScreen> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   String _currentPane = '%0';
   ServerConfig? _serverConfig;
   bool _introspected = false;
@@ -50,6 +56,14 @@ class _SessionScreenState extends State<SessionScreen> {
   final _terminals = <String, Terminal>{};
   final _feeders = <String, PaneOutputFeeder>{};
   StreamSubscription<PaneOutput>? _subscription;
+
+  // Mod mode (prefix gesture layer).
+  bool _modMode = false;
+  bool _menuOpen = false;
+  Timer? _modTimer;
+  int _maxPointers = 1;
+  final Map<int, Offset> _pointerStart = {};
+  Offset _gestureDelta = Offset.zero;
 
   @override
   void initState() {
@@ -71,6 +85,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   @override
   void dispose() {
+    _modTimer?.cancel();
     _subscription?.cancel();
     for (final feeder in _feeders.values) {
       feeder.dispose();
@@ -162,6 +177,110 @@ class _SessionScreenState extends State<SessionScreen> {
   static String _quote(String value) =>
       "'${value.replaceAll("'", "'\\''")}'";
 
+  // --- Mod mode -----------------------------------------------------------
+
+  void _enterModMode() {
+    setState(() => _modMode = true);
+    _modTimer?.cancel();
+    _modTimer = Timer(const Duration(milliseconds: 2500), _exitModMode);
+  }
+
+  void _exitModMode() {
+    _modTimer?.cancel();
+    if (_modMode && mounted) {
+      setState(() => _modMode = false);
+    }
+  }
+
+  /// Executes a mod command, closes the menu sheet and surfaces errors
+  /// (e.g. break-pane in a single-pane window) as a snackbar.
+  void _runModCommand(String command) {
+    _exitModMode();
+    if (_menuOpen && mounted) {
+      Navigator.of(context).pop();
+      _menuOpen = false;
+    }
+    unawaited(widget.client.runCommand(command).then((result) {
+      final text = result.trim();
+      if (text.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('tmux: $text')),
+        );
+      }
+    }).catchError((_) {}));
+  }
+
+  /// Recognizer path (normal mode only): horizontal swipes switch the
+  /// displayed pane. Mod-mode gestures are handled by the raw pointer
+  /// analysis below (multi-finger drags are unreliable through the
+  /// gesture arena).
+  void _handleDragEnd({required bool horizontal, required double velocity}) {
+    if (_modMode || velocity.abs() < 100) {
+      return;
+    }
+    if (horizontal) {
+      _switchPane(velocity < 0 ? 1 : -1);
+    }
+  }
+
+  // Raw pointer analysis for mod mode: not part of the gesture arena, so
+  // multi-finger swipes work reliably. Displacement-based.
+  void _onPointerDown(PointerDownEvent event) {
+    if (_pointerStart.isEmpty) {
+      _gestureDelta = Offset.zero;
+      _maxPointers = 1;
+    } else {
+      _maxPointers = _pointerStart.length + 1;
+    }
+    _pointerStart[event.pointer] = event.position;
+  }
+
+  void _onPointerUp(PointerUpEvent event) {
+    if (!_modMode) {
+      _pointerStart.remove(event.pointer);
+      return;
+    }
+    final start = _pointerStart.remove(event.pointer);
+    if (start == null) {
+      return;
+    }
+    _gestureDelta += event.position - start;
+    if (_pointerStart.isNotEmpty) {
+      return;
+    }
+    final delta = _gestureDelta / _maxPointers.toDouble();
+    if (delta.distance < 12) {
+      // Tap: cancel mod mode (closes the menu sheet).
+      _exitModMode();
+      if (_menuOpen && mounted) {
+        Navigator.of(context).pop();
+        _menuOpen = false;
+      }
+      return;
+    }
+    final twoFingers = _maxPointers >= 2;
+    String? command;
+    if (delta.dx.abs() >= delta.dy.abs()) {
+      final right = delta.dx > 0;
+      if (twoFingers) {
+        if (right) {
+          command = 'break-pane';
+        }
+      } else {
+        command = right ? 'split-window -h' : 'previous-window';
+      }
+    } else {
+      command = delta.dy > 0 ? 'split-window -v' : 'new-window';
+    }
+    if (command != null) {
+      _runModCommand(command);
+    }
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    _pointerStart.remove(event.pointer);
+  }
+
   void _switchPane(int direction) {
     final panes = _knownPanes.toList()
       ..sort((a, b) => _paneIndex(a).compareTo(_paneIndex(b)));
@@ -182,18 +301,25 @@ class _SessionScreenState extends State<SessionScreen> {
     if (config == null) {
       return;
     }
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (context) => PrefixMenuSheet(
+    _enterModMode();
+    _menuOpen = true;
+    // NON-modal sheet: the pane area above stays gesture-active (a modal
+    // sheet's barrier would swallow the mod-mode swipes).
+    final controller = _scaffoldKey.currentState!.showBottomSheet(
+      (context) => PrefixMenuSheet(
         config: config,
         onExecute: (command) {
-          unawaited(widget.client.runCommand(command).catchError((_) => ''));
+          _runModCommand(command);
         },
         onSendPrefix: () {
-          widget.client.sendCommand('send-prefix -t $_currentPane');
+          _runModCommand('send-prefix -t $_currentPane');
         },
       ),
     );
+    controller.closed.whenComplete(() {
+      _menuOpen = false;
+      _exitModMode();
+    });
   }
 
   void _openHistory() {
@@ -223,11 +349,19 @@ class _SessionScreenState extends State<SessionScreen> {
   Widget build(BuildContext context) {
     final prefix = _serverConfig?.displayPrefix;
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         title: Text(widget.title ?? 'tmux session'),
         actions: [
           FilledButton.tonalIcon(
             onPressed: _serverConfig == null ? null : _openPrefixMenu,
+            style: _modMode
+                ? FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor:
+                        Theme.of(context).colorScheme.onPrimary,
+                  )
+                : null,
             icon: const Icon(Icons.grid_view, size: 18),
             label: Text(prefix ?? '…'),
           ),
@@ -243,18 +377,25 @@ class _SessionScreenState extends State<SessionScreen> {
         child: Column(
           children: [
             Expanded(
-              child: GestureDetector(
-                key: const Key('pane-swipe-area'),
+              child: Listener(
                 behavior: HitTestBehavior.opaque,
-                onHorizontalDragEnd: (details) {
-                  final velocity = details.primaryVelocity ?? 0;
-                  if (velocity < -100) {
-                    _switchPane(1);
-                  } else if (velocity > 100) {
-                    _switchPane(-1);
-                  }
-                },
-                child: PaneView(terminal: _ensurePane(_currentPane)),
+                onPointerDown: _onPointerDown,
+                onPointerUp: _onPointerUp,
+                onPointerCancel: _onPointerCancel,
+                child: GestureDetector(
+                  key: const Key('pane-swipe-area'),
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragEnd: (details) => _handleDragEnd(
+                      horizontal: true,
+                      velocity: details.primaryVelocity ?? 0),
+                  onVerticalDragEnd: (details) => _handleDragEnd(
+                      horizontal: false,
+                      velocity: details.primaryVelocity ?? 0),
+                  child: AbsorbPointer(
+                    absorbing: _modMode,
+                    child: PaneView(terminal: _ensurePane(_currentPane)),
+                  ),
+                ),
               ),
             ),
             Keybar(

@@ -140,11 +140,11 @@ void main() {
     // The prefix button is labeled with the server's real prefix.
     await tester.tap(find.text('C-b'));
     await tester.pumpAndSettle();
-    expect(find.text('Prefix menu (C-b)'), findsOneWidget);
+    expect(find.textContaining('Prefix (C-b)'), findsOneWidget);
     expect(find.text('new-window'), findsOneWidget);
 
     await tester.tap(find.text('new-window'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(commands, contains('new-window'));
 
     // Send-prefix entry forwards the prefix to the pane.
@@ -153,5 +153,109 @@ void main() {
     await tester.tap(find.textContaining('nested tmux'));
     await tester.pump();
     expect(commands, contains('send-prefix -t %0'));
+  });
+
+  Future<void> openModMode(WidgetTester tester) async {
+    await pumpScreen(tester);
+    // Drain setup commands.
+    final pending = commands
+        .where((c) =>
+            c.startsWith('capture-pane') || c.startsWith('refresh-client'))
+        .length;
+    for (var i = 0; i < pending; i++) {
+      input.add(utf8.encode('%begin 1 1\nfiller\n%end 1 1\n'));
+    }
+    await tester.pump();
+    // Introspection so the prefix button is enabled.
+    input.add(utf8.encode('%session-changed \$1 spike\n'));
+    await tester.pump();
+    input.add(utf8.encode('%begin 1 1\nprefix C-b\n%end 1 1\n'));
+    await tester.pump();
+    input.add(utf8.encode(
+        '%begin 1 1\nbind-key -T prefix c new-window\n%end 1 1\n'));
+    await tester.pump();
+    input.add(utf8.encode('%begin 1 1\n%end 1 1\n'));
+    await tester.pump();
+    input.add(utf8.encode('%begin 1 1\n80x24\n%end 1 1\n'));
+    await tester.pump();
+    input.add(utf8.encode('%begin 1 1\n%end 1 1\n'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    // Enter mod mode (opens the menu sheet).
+    await tester.tap(find.text('C-b'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  Future<void> flingPanes(WidgetTester tester, Offset offset) async {
+    // Fling in the UPPER part of the pane area: with the prefix sheet
+    // open, the center is covered by the modal barrier.
+    final origin = tester
+            .getTopLeft(find.byKey(const Key('pane-swipe-area'))) +
+        const Offset(100, 60);
+    await tester.flingFrom(origin, offset, 900);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  testWidgets('mod mode: swipe right splits horizontally', (tester) async {
+    await openModMode(tester);
+    await flingPanes(tester, const Offset(250, 0));
+    expect(commands, contains('split-window -h'));
+  });
+
+  testWidgets('mod mode: swipe down splits vertically', (tester) async {
+    await openModMode(tester);
+    await flingPanes(tester, const Offset(0, 250));
+    expect(commands, contains('split-window -v'));
+  });
+
+  testWidgets('mod mode: swipe up opens a new window', (tester) async {
+    await openModMode(tester);
+    await flingPanes(tester, const Offset(0, -250));
+    expect(commands, contains('new-window'));
+  });
+
+  testWidgets('mod mode: swipe left goes to the previous window',
+      (tester) async {
+    await openModMode(tester);
+    await flingPanes(tester, const Offset(-250, 0));
+    expect(commands, contains('previous-window'));
+  });
+
+  testWidgets('mod mode: two-finger swipe right breaks the pane',
+      (tester) async {
+    await openModMode(tester);
+    final center = tester.getTopLeft(
+            find.byKey(const Key('pane-swipe-area'))) +
+        const Offset(100, 60);
+    final g1 = await tester.startGesture(center);
+    final g2 =
+        await tester.startGesture(center + const Offset(0, 120));
+    for (var i = 0; i < 3; i++) {
+      await g1.moveBy(const Offset(60, 0));
+      await g2.moveBy(const Offset(60, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await g1.up();
+    await g2.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(commands, contains('break-pane'));
+  });
+
+  testWidgets('mod mode locks the terminal and times out',
+      (tester) async {
+    await openModMode(tester);
+    AbsorbPointer paneAbsorber() => tester.widget<AbsorbPointer>(
+          find.descendant(
+            of: find.byKey(const Key('pane-swipe-area')),
+            matching: find.byType(AbsorbPointer),
+          ),
+        );
+    expect(paneAbsorber().absorbing, isTrue);
+    // After the 2.5s timeout the terminal is interactive again.
+    await tester.pump(const Duration(milliseconds: 2600));
+    expect(paneAbsorber().absorbing, isFalse);
   });
 }

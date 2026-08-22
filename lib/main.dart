@@ -1,6 +1,9 @@
 import 'dart:io';
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:tmux_mobile/src/config/known_hosts.dart';
 import 'package:tmux_mobile/src/config/profile_repository.dart';
@@ -26,6 +29,14 @@ void main() async {
   await notifier.initialize();
   final registry = SessionRegistry();
   IntentReceiver.initialize();
+  // Apply FLAG_SECURE before the first frame when enabled.
+  // ignore: avoid_slow_async_io
+  unawaited(settings.load().then((loaded) {
+    if (loaded.secureScreen) {
+      const MethodChannel('tmux_mobile/wakelock')
+          .invokeMethod('setSecureScreen', true);
+    }
+  }));
   for (final text in await IntentReceiver.drainPending()) {
     registry.deliverText(text);
   }

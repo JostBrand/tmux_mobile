@@ -109,7 +109,7 @@ class _SessionScreenState extends State<SessionScreen> {
     _activityMonitor = widget.activityMonitor ?? ActivityMonitor();
     _sessionHandle = LiveSessionHandle(
       profileName: widget.title ?? 'tmux session',
-      sendText: (text) => _sendExternalText(text),
+      offerText: (text) => _promptSendText(text),
     );
     widget.registry?.register(_sessionHandle);
     _closeCurrentSession = widget.onDispose ?? () async {};
@@ -139,8 +139,17 @@ class _SessionScreenState extends State<SessionScreen> {
     if (text == null) {
       return;
     }
+    _promptSendText(text).then((_) => _offerQueuedTexts());
+  }
+
+  /// Asks the user before external text reaches the terminal (security:
+  /// another app may fire intents at us).
+  Future<void> _promptSendText(String text) {
+    if (!mounted) {
+      return Future.value();
+    }
     final preview = text.length > 60 ? '${text.substring(0, 60)}…' : text;
-    showDialog<void>(
+    return showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Text from another app'),
@@ -169,7 +178,7 @@ class _SessionScreenState extends State<SessionScreen> {
           ),
         ],
       ),
-    ).then((_) => _offerQueuedTexts());
+    ).then((_) {});
   }
 
   void _sendExternalText(String text) {

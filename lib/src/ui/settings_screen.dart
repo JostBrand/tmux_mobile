@@ -15,6 +15,10 @@ class _KeepScreenOn {
   static void set(bool enabled) {
     _channel.invokeMethod('setKeepScreenOn', enabled);
   }
+
+  static void setSecureScreen(bool enabled) {
+    _channel.invokeMethod('setSecureScreen', enabled);
+  }
 }
 
 /// App settings: font size, haptics, keep-screen-on, profile
@@ -43,6 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() => _settings = settings);
         _applyKeepScreenOn(settings.keepScreenOn);
+        _applySecureScreen(settings.secureScreen);
       }
     });
   }
@@ -51,10 +56,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _settings = settings);
     widget.settingsStore.save(settings);
     _applyKeepScreenOn(settings.keepScreenOn);
+    _applySecureScreen(settings.secureScreen);
   }
 
   void _applyKeepScreenOn(bool enabled) {
     _KeepScreenOn.set(enabled);
+  }
+
+  void _applySecureScreen(bool enabled) {
+    _KeepScreenOn.setSecureScreen(enabled);
   }
 
   Future<void> _exportProfiles() async {
@@ -142,6 +152,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value: settings.keepScreenOn,
                   onChanged: (value) =>
                       _update(settings.copyWith(keepScreenOn: value)),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.no_photography),
+                  title: const Text('Block screenshots'),
+                  subtitle: const Text(
+                      'FLAG_SECURE: prevents screenshots and screen '
+                      'recording of terminal content'),
+                  value: settings.secureScreen,
+                  onChanged: (value) =>
+                      _update(settings.copyWith(secureScreen: value)),
                 ),
                 const Divider(),
                 ListTile(

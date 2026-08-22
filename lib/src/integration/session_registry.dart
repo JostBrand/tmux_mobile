@@ -7,14 +7,15 @@ import 'package:tmux_mobile/src/integration/intent_receiver.dart';
 class LiveSessionHandle {
   const LiveSessionHandle({
     required this.profileName,
-    required this.sendText,
+    required this.offerText,
   });
 
   final String profileName;
 
-  /// Sends raw text into the active pane (translateKeyboardInput handles
-  /// Enter/Backspace mapping).
-  final void Function(String text) sendText;
+  /// Shows a confirmation dialog for text from another app (never send
+  /// external input into a live terminal without explicit user consent -
+  /// a hostile app could fire ACTION_SEND at us).
+  final void Function(String text) offerText;
 }
 
 /// Tracks the currently open session + queues incoming text from other
@@ -50,12 +51,13 @@ class SessionRegistry {
     }
   }
 
-  /// Routes text from another app: to the live session or the queue.
+  /// Routes text from another app: offers it to the live session (user
+  /// confirms) or queues it for the next connect.
   /// Returns false when it landed in the queue (no session open).
   bool deliverText(String text) {
     final session = _session;
     if (session != null) {
-      session.sendText(text);
+      session.offerText(text);
       return true;
     }
     queue.add(text);

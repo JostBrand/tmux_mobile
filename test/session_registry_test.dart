@@ -17,15 +17,15 @@ void main() {
     expect(queue.length, 0);
   });
 
-  test('registry delivers to the live session', () {
+  test('registry offers text to the live session', () {
     final registry = SessionRegistry();
-    final sent = <String>[];
+    final offered = <String>[];
     registry.register(LiveSessionHandle(
       profileName: 'dev',
-      sendText: sent.add,
+      offerText: offered.add,
     ));
     expect(registry.deliverText('hello'), isTrue);
-    expect(sent, ['hello']);
+    expect(offered, ['hello']);
     expect(registry.queue.length, 0);
   });
 
@@ -34,26 +34,26 @@ void main() {
     expect(registry.deliverText('hello'), isFalse);
     expect(registry.queue.items, ['hello']);
 
-    final sent = <String>[];
+    final offered = <String>[];
     registry.register(LiveSessionHandle(
       profileName: 'dev',
-      sendText: sent.add,
+      offerText: offered.add,
     ));
-    // Delivered texts go straight to the session now.
+    // Delivered texts are offered to the session now.
     expect(registry.deliverText('direct'), isTrue);
-    expect(sent, ['direct']);
+    expect(offered, ['direct']);
   });
 
   test('unregister stops delivery', () {
     final registry = SessionRegistry();
-    final sent = <String>[];
+    final offered = <String>[];
     final handle = LiveSessionHandle(
       profileName: 'dev',
-      sendText: sent.add,
+      offerText: offered.add,
     );
     registry.register(handle);
     registry.unregister(handle);
     expect(registry.deliverText('queued'), isFalse);
-    expect(sent, isEmpty);
+    expect(offered, isEmpty);
   });
 }

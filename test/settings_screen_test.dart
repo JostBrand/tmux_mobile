@@ -26,6 +26,10 @@ void main() {
     await tester.pump();
     expect(store.settings.keepScreenOn, isTrue);
 
+    await tester.tap(find.text('Block screenshots'));
+    await tester.pump();
+    expect(store.settings.secureScreen, isTrue);
+
     await tester.tap(find.text('Export profiles'));
     await tester.pump();
     expect(find.textContaining('No profiles'), findsOneWidget);

@@ -82,6 +82,28 @@ class SshTmuxTransport {
   /// Without a store every key is accepted (tests, local sshd).
   final KnownHostsStore? knownHosts;
 
+  /// Keyboard-interactive handler (2FA/TOTP): answers non-echo prompts
+  /// with the password/OTP from [passwordPrompt], echo prompts with an
+  /// empty string. Users with a second factor can connect through the
+  /// same password prompt.
+  FutureOr<List<String>?>? _onUserInfoRequest(SSHUserInfoRequest request) {
+    final prompt = passwordPrompt;
+    if (prompt == null) {
+      return null;
+    }
+    return () async {
+      final responses = <String>[];
+      for (final entry in request.prompts) {
+        if (entry.echo) {
+          responses.add('');
+        } else {
+          responses.add(await prompt() ?? '');
+        }
+      }
+      return responses;
+    }();
+  }
+
   Future<SSHClient> _connectClient({Duration timeout = const Duration(seconds: 15)}) async {
     final socket = await SSHSocket.connect(host, port, timeout: timeout);
     final client = SSHClient(
@@ -89,6 +111,7 @@ class SshTmuxTransport {
       username: username,
       identities: identity == null ? null : [identity!],
       onPasswordRequest: passwordPrompt == null ? null : () => passwordPrompt!(),
+      onUserInfoRequest: _onUserInfoRequest,
       onVerifyHostKey: _verifyHostKey,
       keepAliveInterval: const Duration(seconds: 10),
     );

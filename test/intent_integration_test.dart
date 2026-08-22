@@ -113,6 +113,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
+    // Security: external text needs explicit confirmation even in a live
+    // session (hostile apps can fire intents at us).
+    expect(find.text('Text from another app'), findsOneWidget);
+    await tester.tap(find.text('Send'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
     expect(commands, contains("send-keys -t %0 -- 'direct-command'"));
   });
 }

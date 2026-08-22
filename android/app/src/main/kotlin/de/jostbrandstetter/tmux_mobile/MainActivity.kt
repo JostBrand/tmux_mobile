@@ -28,6 +28,15 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
+                "setSecureScreen" -> {
+                    val enabled = call.arguments as? Boolean ?: false
+                    if (enabled) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    }
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }

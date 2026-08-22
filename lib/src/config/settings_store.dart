@@ -7,12 +7,17 @@ class AppSettings {
     this.fontSize = 14,
     this.hapticFeedback = true,
     this.keepScreenOn = false,
+    this.secureScreen = false,
     this.recentProfileIds = const [],
   });
 
   final double fontSize;
   final bool hapticFeedback;
   final bool keepScreenOn;
+
+  /// Block screenshots/screen recording while the app is visible
+  /// (FLAG_SECURE) - terminal content can contain secrets.
+  final bool secureScreen;
 
   /// Most recently connected profile ids, most recent first.
   final List<String> recentProfileIds;
@@ -21,12 +26,14 @@ class AppSettings {
     double? fontSize,
     bool? hapticFeedback,
     bool? keepScreenOn,
+    bool? secureScreen,
     List<String>? recentProfileIds,
   }) =>
       AppSettings(
         fontSize: fontSize ?? this.fontSize,
         hapticFeedback: hapticFeedback ?? this.hapticFeedback,
         keepScreenOn: keepScreenOn ?? this.keepScreenOn,
+        secureScreen: secureScreen ?? this.secureScreen,
         recentProfileIds: recentProfileIds ?? this.recentProfileIds,
       );
 
@@ -43,6 +50,7 @@ class AppSettings {
         'fontSize': fontSize,
         'hapticFeedback': hapticFeedback,
         'keepScreenOn': keepScreenOn,
+        'secureScreen': secureScreen,
         'recentProfileIds': recentProfileIds,
       };
 
@@ -50,6 +58,7 @@ class AppSettings {
         fontSize: (json['fontSize'] as num?)?.toDouble() ?? 14,
         hapticFeedback: json['hapticFeedback'] as bool? ?? true,
         keepScreenOn: json['keepScreenOn'] as bool? ?? false,
+        secureScreen: json['secureScreen'] as bool? ?? false,
         recentProfileIds: [
           for (final id in (json['recentProfileIds'] as List?) ?? const [])
             id as String,

@@ -39,6 +39,7 @@ class PrefixMenuSheet extends StatelessWidget {
     this.onWindowPicker,
     this.onPanePicker,
     this.onCopyMode,
+    this.onCopySelection,
   });
 
   final ServerConfig config;
@@ -49,6 +50,7 @@ class PrefixMenuSheet extends StatelessWidget {
   final void Function()? onWindowPicker;
   final void Function()? onPanePicker;
   final void Function()? onCopyMode;
+  final void Function()? onCopySelection;
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +115,16 @@ class PrefixMenuSheet extends StatelessWidget {
                         title: const Text('Copy mode'),
                         subtitle: const Text('tmux copy-mode on the pane'),
                         onTap: onCopyMode,
+                      ),
+                    if (onCopySelection != null)
+                      ListTile(
+                        dense: true,
+                        leading: Icon(Icons.content_paste_go,
+                            color: theme.colorScheme.primary),
+                        title: const Text('Copy selection'),
+                        subtitle: const Text(
+                            'copy-selection-and-cancel, then show-buffer'),
+                        onTap: onCopySelection,
                       ),
                     for (final binding in bindings)
                       ListTile(

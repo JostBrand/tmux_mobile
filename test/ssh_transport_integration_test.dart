@@ -103,6 +103,21 @@ void main() {
           .captureHistory('%0', lines: 100)
           .timeout(const Duration(seconds: 10));
       expect(history, contains('via-ssh'));
+
+      // Copy-mode end-to-end: enter copy mode, move to the 'via-ssh'
+      // output line (cursor-up carries the x position over, so reset it
+      // with start-of-line first), select the whole line with -X commands
+      // (mode-agnostic), cancel-with-copy and pull the paste buffer.
+      await control.runCommand('copy-mode');
+      await control.runCommand('send-keys -t %0 -X cursor-up');
+      await control.runCommand('send-keys -t %0 -X start-of-line');
+      await control.runCommand('send-keys -t %0 -X begin-selection');
+      await control.runCommand('send-keys -t %0 -X end-of-line');
+      await control.runCommand(
+          'send-keys -t %0 -X copy-selection-and-cancel');
+      final buffer =
+          await control.runCommand('show-buffer').timeout(const Duration(seconds: 10));
+      expect(buffer, contains('via-ssh'));
     } finally {
       await connection?.close();
       await Process.run('tmux', ['-L', socketName, 'kill-server']);

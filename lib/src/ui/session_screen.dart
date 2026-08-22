@@ -459,12 +459,38 @@ class _SessionScreenState extends State<SessionScreen> {
         onWindowPicker: _openWindowPicker,
         onPanePicker: _openPanePicker,
         onCopyMode: () => _runModCommand('copy-mode'),
+        onCopySelection: _copyTmuxSelection,
       ),
     );
     controller.closed.whenComplete(() {
       _menuOpen = false;
       _exitModMode();
     });
+  }
+
+  /// Copies the tmux copy-mode selection: cancels the mode with a copy,
+  /// then pulls the paste buffer into the clipboard.
+  void _copyTmuxSelection() {
+    _runModCommand('send-keys -t $_currentPane -X copy-selection-and-cancel');
+    unawaited(() async {
+      try {
+        final buffer = await _client.runCommand('show-buffer');
+        final text = buffer.trimRight();
+        if (text.isNotEmpty) {
+          await Clipboard.setData(ClipboardData(text: text));
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text('Copied selection'),
+                  duration: Duration(seconds: 1)),
+            );
+          }
+        }
+      } catch (_) {
+        // No selection - the snackbar above already covers the common
+        // case; keep quiet here.
+      }
+    }());
   }
 
   void _openWindowPicker() {

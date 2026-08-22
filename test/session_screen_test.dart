@@ -141,8 +141,10 @@ void main() {
     await tester.tap(find.text('C-b'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Prefix (C-b)'), findsOneWidget);
-    expect(find.text('new-window'), findsOneWidget);
 
+    // The app entries push the bindings down - scroll the sheet list.
+    await tester.drag(find.byType(ListView).last, const Offset(0, -250));
+    await tester.pump();
     await tester.tap(find.text('new-window'));
     await tester.pumpAndSettle();
     expect(commands, contains('new-window'));
@@ -152,7 +154,7 @@ void main() {
     await tester.tap(find.text('C-b'));
     await tester.pumpAndSettle();
     await tester.drag(
-        find.byType(ListView).last, const Offset(0, -200));
+        find.byType(ListView).last, const Offset(0, -400));
     await tester.pump();
     await tester.tap(find.textContaining('nested tmux'));
     await tester.pump();

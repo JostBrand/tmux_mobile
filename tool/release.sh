@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}' | tr -d '+')
+VERSION=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
 TAG="v${VERSION}"
 
 if [ -z "${FORGEJO_CI_PASSWORD:-}" ]; then

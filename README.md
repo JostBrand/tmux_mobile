@@ -50,3 +50,16 @@ flutter test
 - Local tmux integration tests spawn a real tmux server on a private socket.
 - The SSH integration test needs the workspace sshd on 127.0.0.1:2222
   (skips when unreachable).
+
+## Releases (self-hosted via Forgejo)
+
+APKs are distributed as **Forgejo releases** on git.jostbrandstetter.com:
+
+- `tool/release.sh` builds the split-per-abi release APKs and publishes
+  them as a release (tag = the pubspec version) with the CI bot
+  credentials (FORGEJO_CI_* from the workspace secret).
+- The phone gets updates via **Obtainium**: add
+  `https://git.jostbrandstetter.com/jost/tmux_mobile` as an app source
+  (Forgejo release), then check/install updates with one tap.
+- The GitHub repo is a push mirror (pushed by release.sh when the
+  `github` remote exists).

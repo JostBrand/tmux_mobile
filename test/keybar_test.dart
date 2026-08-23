@@ -21,6 +21,11 @@ void main() {
       'C-u',
       'C-w',
       'C-r',
+      'C-k',
+      'C-n',
+      'C-p',
+      'C-x',
+      'C-y',
       'Home',
       'End',
     ]) {
@@ -41,6 +46,11 @@ void main() {
       'C-u',
       'C-w',
       'C-r',
+      'C-k',
+      'C-n',
+      'C-p',
+      'C-x',
+      'C-y',
       'Home',
       'End',
     ]);

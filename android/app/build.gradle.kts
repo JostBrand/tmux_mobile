@@ -25,11 +25,32 @@ android {
         versionName = flutter.versionName
     }
 
+    // Stable release signing: the keystore lives on the workspace PVC
+    // (/workspaces/.keystore/tmux_mobile-release.jks, password via the
+    // KEYSTORE_PASSWORD env var). NEVER use the debug key for releases -
+    // it is regenerated per pod (overlay HOME) and Android then refuses
+    // updates with "App not updated" (signature mismatch).
+    val keystoreFile = file(
+        System.getenv("KEYSTORE_PATH") ?: "/workspaces/.keystore/tmux_mobile-release.jks",
+    )
+    if (keystoreFile.exists()) {
+        signingConfigs {
+            create("release") {
+                storeFile = keystoreFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = "tmuxmobile"
+                keyPassword = System.getenv("KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystoreFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

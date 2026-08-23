@@ -20,6 +20,21 @@ AUTH="${FORGEJO_CI_USERNAME:-ci}:${FORGEJO_CI_PASSWORD}"
 API="https://git.jostbrandstetter.com/api/v1"
 REPO="jost/tmux_mobile"
 
+# Stable release signing: restore the keystore from the SOPS backup when
+# the PVC copy is missing (fresh volume), then point gradle at it.
+KEYSTORE_PATH="${KEYSTORE_PATH:-/workspaces/.keystore/tmux_mobile-release.jks}"
+if [ ! -f "$KEYSTORE_PATH" ] && [ -n "${KEYSTORE_B64_BACKUP:-}" ]; then
+  mkdir -p "$(dirname "$KEYSTORE_PATH")"
+  echo "$KEYSTORE_B64_BACKUP" | base64 -d > "$KEYSTORE_PATH"
+  chmod 600 "$KEYSTORE_PATH"
+  echo "    keystore restored from backup"
+fi
+if [ ! -f "$KEYSTORE_PATH" ]; then
+  echo "Release keystore missing at $KEYSTORE_PATH" >&2
+  exit 1
+fi
+export KEYSTORE_PATH
+
 echo "==> Building release APKs (${TAG})"
 export PUB_CACHE="${PUB_CACHE:-/workspaces/.cache/pub}"
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-/workspaces/.cache/gradle}"

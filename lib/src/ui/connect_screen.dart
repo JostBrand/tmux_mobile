@@ -191,11 +191,23 @@ class _ConnectScreenState extends State<ConnectScreen> {
       }
       final resolvedSession = sessionName;
 
-      final session = await widget.sessionFactory.open(
-        widget.profile,
-        sessionName: resolvedSession,
-        passwordPrompt: passwordPrompt,
-      );
+      OpenSession session;
+      try {
+        session = await widget.sessionFactory.open(
+          widget.profile,
+          sessionName: resolvedSession,
+          passwordPrompt: passwordPrompt,
+        );
+      } catch (_) {
+        // One automatic retry: the first attempt often fails on slow
+        // DNS resolution or sshd startup - the retry is usually instant.
+        await Future<void>.delayed(const Duration(seconds: 2));
+        session = await widget.sessionFactory.open(
+          widget.profile,
+          sessionName: resolvedSession,
+          passwordPrompt: passwordPrompt,
+        );
+      }
       final settingsStore = widget.settingsStore;
       if (settingsStore != null) {
         final settings = await settingsStore.load();
@@ -233,7 +245,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
   }
 
   String _describeError(Object error) {
-    final text = error.toString();
+    var text = error.toString();
+    if (text.isEmpty || text == 'Exception') {
+      text = error.runtimeType.toString();
+    }
     if (text.contains('host key')) {
       return 'Host key verification failed - the server key changed. '
           'This could be a man-in-the-middle attack.';

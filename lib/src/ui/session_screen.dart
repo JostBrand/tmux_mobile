@@ -409,6 +409,24 @@ class _SessionScreenState extends State<SessionScreen> {
       // The badge simply does not appear.
     }
     try {
+      // Pane DISCOVERY: pane ids are server-wide counters - %0 only
+      // exists when it was the very first pane created on the server.
+      // Never hardcode it; query the active pane of our session instead.
+      final paneId = (await _client.runCommand("display-message -p '#{pane_id}'"))
+          .trim();
+      if (paneId.isNotEmpty && _knownPanes.add(paneId)) {
+        _currentPane = paneId;
+        _knownPanes.remove('%0');
+        _ensurePane(paneId);
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    } catch (_) {
+      // Keep the %0 assumption as last resort (fresh single-session
+      // servers usually still start at %0).
+    }
+    try {
       // Adopt the window size ONCE: the control client's size influences
       // window-size=smallest servers, so matching the existing window
       // avoids shrinking panes for desktop clients.

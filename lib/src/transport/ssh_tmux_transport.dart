@@ -104,7 +104,7 @@ class SshTmuxTransport {
     }();
   }
 
-  Future<SSHClient> _connectClient({Duration timeout = const Duration(seconds: 15)}) async {
+  Future<SSHClient> _connectClient({Duration timeout = const Duration(seconds: 30)}) async {
     final socket = await SSHSocket.connect(host, port, timeout: timeout);
     final client = SSHClient(
       socket,
@@ -155,7 +155,7 @@ class SshTmuxTransport {
     String sessionName, {
     int width = 80,
     int height = 24,
-    Duration timeout = const Duration(seconds: 15),
+    Duration timeout = const Duration(seconds: 30),
     String? socketName,
   }) async {
     final client = await _connectClient(timeout: timeout);

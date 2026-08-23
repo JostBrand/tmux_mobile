@@ -65,12 +65,15 @@ void main() {
     input.add(utf8.encode('%begin 1 1\n%end 1 1\n'));
     await tester.pump();
     // Command order in _introspectServer: prefix, list-keys,
-    // detach-on-destroy, list-panes, display-message, refresh-client.
-    input.add(utf8.encode('%begin 1 1\n%0:tmux\n%end 1 1\n'));
+    // detach-on-destroy, list-panes, display-message(pane_id),
+    // display-message(size), refresh-client.
+    input.add(utf8.encode('%begin 1 1\n%0:tmux\n%end 1 1\n')); // 4
     await tester.pump();
-    input.add(utf8.encode('%begin 1 1\n80x24\n%end 1 1\n'));
+    input.add(utf8.encode('%begin 1 1\n%0\n%end 1 1\n')); // 5 pane_id
     await tester.pump();
-    input.add(utf8.encode('%begin 1 1\n%end 1 1\n'));
+    input.add(utf8.encode('%begin 1 1\n80x24\n%end 1 1\n')); // 6 size
+    await tester.pump();
+    input.add(utf8.encode('%begin 1 1\n%end 1 1\n')); // 7 refresh
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -104,11 +107,13 @@ void main() {
     await tester.pump();
     input.add(utf8.encode('%begin 1 1\n%end 1 1\n'));
     await tester.pump();
-    input.add(utf8.encode('%begin 1 1\n%0:bash\n%end 1 1\n'));
+    input.add(utf8.encode('%begin 1 1\n%0:bash\n%end 1 1\n')); // 4
     await tester.pump();
-    input.add(utf8.encode('%begin 1 1\n80x24\n%end 1 1\n'));
+    input.add(utf8.encode('%begin 1 1\n%0\n%end 1 1\n')); // 5 pane_id
     await tester.pump();
-    input.add(utf8.encode('%begin 1 1\n%end 1 1\n'));
+    input.add(utf8.encode('%begin 1 1\n80x24\n%end 1 1\n')); // 6 size
+    await tester.pump();
+    input.add(utf8.encode('%begin 1 1\n%end 1 1\n')); // 7 refresh
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 

@@ -83,7 +83,7 @@ class ControlModeClient {
       // (pane ids like '%0:bash' in capture-pane/list-panes output).
       if (line.startsWith('%end') || line.startsWith('%error')) {
         _collecting = false;
-        _completePendingCommand(_commandOutput.toString());
+        _completePendingCommand(_commandOutput.toString(), failed: line.startsWith('%error'));
         _commandOutput.clear();
       } else if (!line.startsWith('%begin')) {
         _commandOutput.writeln(line);
@@ -129,14 +129,22 @@ class ControlModeClient {
     output.add(utf8.encode('$line\n'));
   }
 
-  void _completePendingCommand(String output) {
+  void _completePendingCommand(String output, {bool failed = false}) {
     // tmux sends an unsolicited %begin/%end pair right after attach - drop
     // it when no command is pending.
     if (_pendingCommands.isEmpty) {
       return;
     }
     final pending = _pendingCommands.removeFirst();
-    pending.complete(output.trimRight());
+    final text = output.trimRight();
+    if (failed) {
+      // Failed commands (%error) throw so callers surface the message
+      // instead of rendering the error text as pane content.
+      pending.completeError(
+          StateError(text.isEmpty ? 'tmux command failed' : text));
+    } else {
+      pending.complete(text);
+    }
   }
 
   /// Send a raw tmux command line (e.g. `send-keys -t %0 ls`).

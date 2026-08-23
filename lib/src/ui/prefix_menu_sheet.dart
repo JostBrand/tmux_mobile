@@ -40,6 +40,8 @@ class PrefixMenuSheet extends StatelessWidget {
     this.onPanePicker,
     this.onCopyMode,
     this.onCopySelection,
+    this.onInnerPrefix,
+    this.innerPrefixLabel,
   });
 
   final ServerConfig config;
@@ -51,6 +53,8 @@ class PrefixMenuSheet extends StatelessWidget {
   final void Function()? onPanePicker;
   final void Function()? onCopyMode;
   final void Function()? onCopySelection;
+  final void Function()? onInnerPrefix;
+  final String? innerPrefixLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -142,6 +146,16 @@ class PrefixMenuSheet extends StatelessWidget {
                         title: Text(binding.command),
                         trailing: _hint(theme, binding.command),
                         onTap: () => onExecute(binding.command),
+                      ),
+                    if (onInnerPrefix != null)
+                      ListTile(
+                        dense: true,
+                        leading: Icon(Icons.layers,
+                            color: theme.colorScheme.tertiary),
+                        title: Text('Inner prefix ($innerPrefixLabel)'),
+                        subtitle: const Text(
+                            'Sends the prefix of the NESTED tmux session'),
+                        onTap: onInnerPrefix,
                       ),
                     const Divider(height: 1),
                     ListTile(

@@ -30,6 +30,12 @@ void main() {
     await tester.pump();
     expect(store.settings.secureScreen, isTrue);
 
+    await tester.tap(find.byType(DropdownButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('C-a').last);
+    await tester.pumpAndSettle();
+    expect(store.settings.innerPrefix, 'C-a');
+
     await tester.tap(find.text('Export profiles'));
     await tester.pump();
     expect(find.textContaining('No profiles'), findsOneWidget);

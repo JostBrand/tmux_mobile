@@ -8,6 +8,7 @@ class AppSettings {
     this.hapticFeedback = true,
     this.keepScreenOn = false,
     this.secureScreen = false,
+    this.innerPrefix = 'C-b',
     this.recentProfileIds = const [],
   });
 
@@ -19,6 +20,10 @@ class AppSettings {
   /// (FLAG_SECURE) - terminal content can contain secrets.
   final bool secureScreen;
 
+  /// Prefix combo sent for NESTED tmux sessions (the inner server's
+  /// prefix, since phone keyboards cannot type control combos).
+  final String innerPrefix;
+
   /// Most recently connected profile ids, most recent first.
   final List<String> recentProfileIds;
 
@@ -27,6 +32,7 @@ class AppSettings {
     bool? hapticFeedback,
     bool? keepScreenOn,
     bool? secureScreen,
+    String? innerPrefix,
     List<String>? recentProfileIds,
   }) =>
       AppSettings(
@@ -34,6 +40,7 @@ class AppSettings {
         hapticFeedback: hapticFeedback ?? this.hapticFeedback,
         keepScreenOn: keepScreenOn ?? this.keepScreenOn,
         secureScreen: secureScreen ?? this.secureScreen,
+        innerPrefix: innerPrefix ?? this.innerPrefix,
         recentProfileIds: recentProfileIds ?? this.recentProfileIds,
       );
 
@@ -51,6 +58,7 @@ class AppSettings {
         'hapticFeedback': hapticFeedback,
         'keepScreenOn': keepScreenOn,
         'secureScreen': secureScreen,
+        'innerPrefix': innerPrefix,
         'recentProfileIds': recentProfileIds,
       };
 
@@ -59,6 +67,7 @@ class AppSettings {
         hapticFeedback: json['hapticFeedback'] as bool? ?? true,
         keepScreenOn: json['keepScreenOn'] as bool? ?? false,
         secureScreen: json['secureScreen'] as bool? ?? false,
+        innerPrefix: json['innerPrefix'] as String? ?? 'C-b',
         recentProfileIds: [
           for (final id in (json['recentProfileIds'] as List?) ?? const [])
             id as String,

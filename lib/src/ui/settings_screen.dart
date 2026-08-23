@@ -153,6 +153,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (value) =>
                       _update(settings.copyWith(keepScreenOn: value)),
                 ),
+                ListTile(
+                  leading: const Icon(Icons.layers),
+                  title: const Text('Inner tmux prefix'),
+                  subtitle: const Text(
+                      'Prefix of a NESTED tmux session (sent via the '
+                      'prefix menu / badge)'),
+                  trailing: DropdownButton<String>(
+                    value: settings.innerPrefix,
+                    items: const [
+                      DropdownMenuItem(value: 'C-b', child: Text('C-b')),
+                      DropdownMenuItem(value: 'C-a', child: Text('C-a')),
+                      DropdownMenuItem(value: 'C-t', child: Text('C-t')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        _update(settings.copyWith(innerPrefix: value));
+                      }
+                    },
+                  ),
+                ),
                 SwitchListTile(
                   secondary: const Icon(Icons.no_photography),
                   title: const Text('Block screenshots'),

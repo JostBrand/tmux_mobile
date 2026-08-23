@@ -133,12 +133,15 @@ void main() {
     await tester.pump();
     input.add(utf8.encode('%begin 1 1\n%end 1 1\n')); // 5 refresh
     await tester.pump();
+    // 6th introspection command: list-panes (nested-tmux detection).
+    input.add(utf8.encode('%begin 1 1\n%0:bash\n%end 1 1\n'));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(commands, contains("set-option -t 'spike' detach-on-destroy off"));
 
     // The prefix button is labeled with the server's real prefix.
-    await tester.tap(find.text('C-b'));
+    await tester.tap(find.widgetWithText(FilledButton, 'C-b'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Prefix (C-b)'), findsOneWidget);
 
@@ -151,7 +154,7 @@ void main() {
 
     // Send-prefix entry forwards the prefix to the pane (it sits at the
     // bottom of the sheet - scroll the sheet list first).
-    await tester.tap(find.text('C-b'));
+    await tester.tap(find.widgetWithText(FilledButton, 'C-b'));
     await tester.pumpAndSettle();
     await tester.drag(
         find.byType(ListView).last, const Offset(0, -400));
@@ -186,9 +189,12 @@ void main() {
     await tester.pump();
     input.add(utf8.encode('%begin 1 1\n%end 1 1\n'));
     await tester.pump();
+    // 6th introspection command: list-panes (nested-tmux detection).
+    input.add(utf8.encode('%begin 1 1\n%0:bash\n%end 1 1\n'));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     // Enter mod mode (opens the menu sheet).
-    await tester.tap(find.text('C-b'));
+    await tester.tap(find.widgetWithText(FilledButton, 'C-b'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
   }

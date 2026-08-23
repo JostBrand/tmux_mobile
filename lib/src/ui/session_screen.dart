@@ -91,6 +91,9 @@ class _SessionScreenState extends State<SessionScreen> {
   final _terminals = <String, Terminal>{};
   final _viewKeys = <String, GlobalKey<TerminalViewState>>{};
   final _paneMouseEnabled = <String, bool>{};
+  final _paneCommands = <String, String>{};
+  bool _innerPrefixArmed = false;
+  Timer? _innerPrefixTimer;
   final _feeders = <String, PaneOutputFeeder>{};
   StreamSubscription<PaneOutput>? _subscription;
   StreamSubscription<String>? _windowSubscription;
@@ -289,6 +292,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
   @override
   void dispose() {
+    _innerPrefixTimer?.cancel();
     widget.registry?.unregister(_sessionHandle);
     _modTimer?.cancel();
     _windowSubscription?.cancel();
@@ -386,6 +390,23 @@ class _SessionScreenState extends State<SessionScreen> {
           'set-option -t ${_quote(sessionName)} detach-on-destroy off');
     } catch (_) {
       // Non-fatal.
+    }
+    try {
+      // Pane commands (nested-tmux detection: pane_current_command).
+      final panes = await _client
+          .runCommand("list-panes -F '#{pane_id}:#{pane_current_command}'");
+      for (final line in panes.split('\n')) {
+        if (line.trim().isEmpty) {
+          continue;
+        }
+        final parts = line.trim().split(':');
+        _paneCommands[parts.first] = parts.sublist(1).join(':');
+      }
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {
+      // The badge simply does not appear.
     }
     try {
       // Adopt the window size ONCE: the control client's size influences
@@ -581,6 +602,19 @@ class _SessionScreenState extends State<SessionScreen> {
   static int _paneIndex(String paneId) =>
       int.tryParse(paneId.substring(1)) ?? 0;
 
+  /// Sends the NESTED tmux prefix (phone keyboards cannot type C-b).
+  void _sendInnerPrefix() {
+    _client.sendCommand(
+        'send-keys -t $_currentPane ${_settings.innerPrefix}');
+    setState(() => _innerPrefixArmed = true);
+    _innerPrefixTimer?.cancel();
+    _innerPrefixTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) {
+        setState(() => _innerPrefixArmed = false);
+      }
+    });
+  }
+
   void _openPrefixMenu() {
     final config = _serverConfig;
     if (config == null) {
@@ -603,6 +637,13 @@ class _SessionScreenState extends State<SessionScreen> {
         onPanePicker: _openPanePicker,
         onCopyMode: () => _runModCommand('copy-mode'),
         onCopySelection: _copyTmuxSelection,
+        onInnerPrefix: () {
+          Navigator.of(context).pop();
+          _menuOpen = false;
+          _exitModMode();
+          _sendInnerPrefix();
+        },
+        innerPrefixLabel: _settings.innerPrefix,
       ),
     );
     controller.closed.whenComplete(() {
@@ -750,6 +791,20 @@ class _SessionScreenState extends State<SessionScreen> {
           ],
         ),
         actions: [
+          if (_paneCommands[_currentPane] == 'tmux')
+            Tooltip(
+              message: 'Nested tmux detected - tap to send the inner '
+                  'prefix (${_settings.innerPrefix})',
+              child: IconButton(
+                key: const Key('nested-tmux-badge'),
+                icon: Icon(Icons.layers,
+                    size: 18,
+                    color: _innerPrefixArmed
+                        ? theme.colorScheme.tertiary
+                        : null),
+                onPressed: _sendInnerPrefix,
+              ),
+            ),
           if (_status == ConnectionStatus.failed)
             IconButton(
               tooltip: 'Reconnect',
@@ -823,6 +878,8 @@ class _SessionScreenState extends State<SessionScreen> {
               onKey: (key) => _client.sendKeys(_currentPane, key),
               onPaste: _paste,
               onCopy: _copy,
+              innerPrefixKey: _settings.innerPrefix,
+              onInnerPrefix: _sendInnerPrefix,
             ),
           ],
         ),

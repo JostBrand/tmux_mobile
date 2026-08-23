@@ -13,11 +13,18 @@ class Keybar extends StatefulWidget {
     required this.onKey,
     this.onPaste,
     this.onCopy,
+    this.innerPrefixKey,
+    this.onInnerPrefix,
   });
 
   final void Function(String tmuxKeyName) onKey;
   final void Function()? onPaste;
   final void Function()? onCopy;
+
+  /// Label + callback for the NESTED-tmux prefix key (phone keyboards
+  /// cannot type control combos like C-b).
+  final String? innerPrefixKey;
+  final void Function()? onInnerPrefix;
 
   @override
   State<Keybar> createState() => _KeybarState();
@@ -85,6 +92,7 @@ class _KeybarState extends State<Keybar> {
           _scrollableRow(_rowNavigation, theme),
           _scrollableRow(
             [
+              if (widget.innerPrefixKey != null) widget.innerPrefixKey!,
               if (widget.onPaste != null) 'Paste',
               if (widget.onCopy != null) 'Copy',
               ..._rowCombos,
@@ -112,6 +120,22 @@ class _KeybarState extends State<Keybar> {
   }
 
   Widget _keyButton(String key, ThemeData theme) {
+    if (key == widget.innerPrefixKey) {
+      return TextButton(
+        onPressed: widget.onInnerPrefix,
+        style: TextButton.styleFrom(
+          minimumSize: const Size(40, 38),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          backgroundColor: theme.colorScheme.tertiaryContainer,
+          foregroundColor: theme.colorScheme.onTertiaryContainer,
+          textStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        child: Text(key),
+      );
+    }
     if (key == 'Paste' || key == 'Copy') {
       return TextButton.icon(
         onPressed: key == 'Paste' ? widget.onPaste : widget.onCopy,

@@ -53,8 +53,11 @@ void main() {
     await tester.pump();
     input.add(utf8.encode('%begin 1 1\n%end 1 1\n'));
     await tester.pump();
+    // 6th introspection command: list-panes (nested-tmux detection).
+    input.add(utf8.encode('%begin 1 1\n%0:bash\n%end 1 1\n'));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text('C-b'));
+    await tester.tap(find.widgetWithText(FilledButton, 'C-b'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     // Drain commands triggered by the size adoption (terminal resize ->

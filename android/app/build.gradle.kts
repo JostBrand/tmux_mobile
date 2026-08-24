@@ -7,7 +7,6 @@ plugins {
 android {
     namespace = "de.jostbrandstetter.tmux_mobile"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
